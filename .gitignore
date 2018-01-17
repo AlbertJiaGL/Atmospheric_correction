@@ -1,0 +1,15 @@
+*.pyc
+munich.sh
+*.tif
+*.nc
+*.hdf
+*.pkl
+*.out
+*.temp
+*.ipynb
+*.swp
+*.hdf
+*.egg-info/
+*.iml
+.ipynb_checkpoints/
+
