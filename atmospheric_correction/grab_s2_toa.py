@@ -283,8 +283,8 @@ class read_s2(object):
                 print('Reconstruct failed and original angles are used.')
 if __name__ == '__main__':
     
-    s2 = read_s2('/store/S2_data/', '11SKD', \
-                  2016, 11, 11, bands = ['B02', 'B03', 'B04', 'B08', 'B11'] )
+    s2 = read_s2('/store/S2_data/', '32UPU', \
+                  2017, 10, 19, bands = ['B02', 'B03', 'B04', 'B08', 'B11'] )
     '''
     s2.selected_img = s2.get_s2_toa() 
     s2.get_s2_cloud()

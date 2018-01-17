@@ -1,4 +1,5 @@
 *.pyc
+*validation*
 munich.sh
 *.tif
 *.nc

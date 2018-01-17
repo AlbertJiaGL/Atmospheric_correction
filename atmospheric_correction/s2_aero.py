@@ -42,7 +42,7 @@ class solve_aerosol(object):
                  mcd43_dir   = '/data/selene/ucfajlg/Ujia/MCD43/',
                  s2_toa_dir  = '/home/ucfafyi/DATA/S2_MODIS/s_data/',
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
-                 wv_emus_dir = '/home/ucfafyi/DATA/Multiply/emus/wv_msi_retrieval.pkl',
+                 wv_emus_dir = '/home/ucfafyi/DATA/Multiply/emus/wv_msi_retrieval_S2.pkl',
                  cams_dir    = '/home/ucfafyi/DATA/Multiply/cams/',
                  mod08_dir   = '/home/ucfafyi/DATA/Multiply/mod08/',
                  s2_tile     = '29SQB',
@@ -205,7 +205,7 @@ class solve_aerosol(object):
             red_inputs  = np.array([red_sza,  red_vza,  red_raa,  zero_aod, tcwv[nHx, nHy], tco3[nHx, nHy], ele_data[Hx, Hy]])
             blue_inputs = np.array([blue_sza, blue_vza, blue_raa, zero_aod, tcwv[nHx, nHy], tco3[nHx, nHy], ele_data[Hx, Hy]])
 
-            p           = np.r_[np.arange(0, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
+            p           = np.r_[np.arange(0.0001, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
             f           =  lambda aot: self._ddv_cost(aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus)
             costs       = parmap(f, p)
             min_ind     = np.argmin(costs)

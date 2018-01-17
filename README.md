@@ -12,10 +12,11 @@ This atmospheric correction method uses MODIS MCD43 BRDF product to get a coarse
 * emus (`multiply_atmospheric_corection/emus`): emulators for the 6S and wv restrival, can be found at: http://www2.geog.ucl.ac.uk/~ucfafyi/emus/
 
 ## Usage:
-* A typical usage for Sentienl 2 is:
-`python Sentinel_atmo_cor.py -f /directory/where/you/store/s2/data/29/S/QB/2017/1/12/0/ [-m MCD43_dir -e emus_dir -d global_DEM -c Cams_dir]`
-
-* Arguments inside [ ] means optional.
+* A typical usage for Sentinel 2 is:
+`python Sentinel_atmo_cor.py -f /directory/where/you/store/s2/data/29/S/QB/2017/1/12/0/ [-m MCD43_dir -e emus_dir -d global_DEM -c cams_dir]`
+* A typical usage for Landsat 8 is:
+`python Landsat8_atmo_cor.py -p 123 -r 34 -D 20170710 -f /directory/where/you/store/l8_data/ [-m MCD43_dir -e emus_dir -d global_DEM -c cams_dir]`
+* Arguments inside [ ] means optional, in the case you store the data in the framework specified above.
 
 ## gp_emulator:
 If you are using python 3.6, please reinstall gp_emulator on branch `python_3_6_compatible`.
