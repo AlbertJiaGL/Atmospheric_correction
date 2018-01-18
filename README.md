@@ -26,4 +26,4 @@ If you are using python 3.6, please reinstall gp_emulator on branch `python_3_6_
 The outputs are the corrected TOA images saved as `B0*_sur.tif` for each band. TOA_RGB.tif and BOA_RGB.tif are generated for a fast visual check of correction results. They are all under `/directory/where/you/store/s2/data/29/S/QB/2017/9/4/0/` as the example usage.
 
 ### Landsat 8:
-The outputs are the corrected TOA images saved as `LC08_L1TP_029029_20160720_20170222_01_T1_sur_b*.tif` for each band, and LC08_L1TP_029029_20160720_20170222_01_T1_TOA_RGB.tif and LC08_L1TP_029029_20160720_20170222_01_T1_BOA_RGB.tif are also generated for fast visual check. They are all under `/directory/where/you/store/l8/data/LC08_L1TP_029029_20160720_20170222_01_T1_b1.tif`.
+The outputs are the corrected TOA images saved as `LC08_L1TP_029029_20160720_20170222_01_T1_sur_b*.tif` for each band, and `LC08_L1TP_029029_20160720_20170222_01_T1_TOA_RGB.tif` and `LC08_L1TP_029029_20160720_20170222_01_T1_BOA_RGB.tif` are also generated for fast visual check. They are all under `/directory/where/you/store/l8/data/LC08_L1TP_029029_20160720_20170222_01_T1_b1.tif`.
