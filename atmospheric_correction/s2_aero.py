@@ -148,7 +148,7 @@ class solve_aerosol(object):
         return xstd, ystd, ang, xs, ys
 
     def _mcd43_cloud(self,flist, lx, ly, example_file, boa, b12):
-        
+           
         g            = gdal.BuildVRT('', list(flist))
         if g is None:
             print('Please download files: ', [i.split('"')[1].split('/')[-1] for i in list(flist)])
@@ -263,7 +263,7 @@ class solve_aerosol(object):
             boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist']
         self.Hx, self.Hy = hx, hy
         self.s2_logger.info('Update cloud mask.') 
-        flist = [f.split('/')[0] + self.mcd43_dir+'/'+ f.split('/')[-1] for f in flist]
+        flist = ['"'.join([f.split('"')[0], self.mcd43_dir+ '/' + f.split('/')[-1]]) for f in flist]
         self._mcd43_cloud(flist, lx, ly, self.example_file, boa, selected_img['B12'])
         self.s2_logger.info('Applying spectral transform.')
         self.s2_boa_qa = np.ma.array(unc)
