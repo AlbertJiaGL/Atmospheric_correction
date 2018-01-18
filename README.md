@@ -15,7 +15,7 @@ This atmospheric correction method uses MODIS MCD43 BRDF product to get a coarse
 * A typical usage for Sentinel 2 is:
 `python Sentinel_atmo_cor.py -f /directory/where/you/store/s2/data/29/S/QB/2017/1/12/0/ [-m MCD43_dir -e emus_dir -d global_DEM -c cams_dir]`
 * A typical usage for Landsat 8 is:
-`python Landsat8_atmo_cor.py -p 123 -r 34 -D 20170710 -f /directory/where/you/store/l8_data/ [-m MCD43_dir -e emus_dir -d global_DEM -c cams_dir]`
+`python Landsat8_atmo_cor.py -f /directory/where/you/store/l8/data/LC08_L1TP_029029_20160720_20170222_01_T1_b1.tif [-m MCD43_dir -e emus_dir -d global_DEM -c cams_dir]`
 * Arguments inside [ ] means optional, in the case you store the data in the framework specified above.
 
 ## gp_emulator:
@@ -23,7 +23,7 @@ If you are using python 3.6, please reinstall gp_emulator on branch `python_3_6_
 
 ## Output:
 ### Sentinel 2:
-The outputs are the corrected TOA images saved as `B0*_sur.tif` for each band. TOA_RGB.tif and BOA_RGB.tif are generated for a fast visual check of correction results. They all under `/directory/where/you/store/s2/data/29/S/QB/2017/9/4/0/` as the example usage.
+The outputs are the corrected TOA images saved as `B0*_sur.tif` for each band. TOA_RGB.tif and BOA_RGB.tif are generated for a fast visual check of correction results. They are all under `/directory/where/you/store/s2/data/29/S/QB/2017/9/4/0/` as the example usage.
 
 ### Landsat 8:
-The outputs are the corrected TOA images saved as `*_sur_b*.tif` for each band, and TOA and BOA tif image are also generated for fast visual check. They all in the same directory where TOA images saved.
+The outputs are the corrected TOA images saved as `LC08_L1TP_029029_20160720_20170222_01_T1_sur_b*.tif` for each band, and LC08_L1TP_029029_20160720_20170222_01_T1_TOA_RGB.tif and LC08_L1TP_029029_20160720_20170222_01_T1_BOA_RGB.tif are also generated for fast visual check. They are all under `/directory/where/you/store/l8/data/LC08_L1TP_029029_20160720_20170222_01_T1_b1.tif`.

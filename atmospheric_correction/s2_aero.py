@@ -205,7 +205,7 @@ class solve_aerosol(object):
             red_inputs  = np.array([red_sza,  red_vza,  red_raa,  zero_aod, tcwv[nHx, nHy], tco3[nHx, nHy], ele_data[Hx, Hy]])
             blue_inputs = np.array([blue_sza, blue_vza, blue_raa, zero_aod, tcwv[nHx, nHy], tco3[nHx, nHy], ele_data[Hx, Hy]])
 
-            p           = np.r_[np.arange(0.0001, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
+            p           = np.r_[np.arange(0.001, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
             f           =  lambda aot: self._ddv_cost(aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus)
             costs       = parmap(f, p)
             min_ind     = np.argmin(costs)
@@ -381,17 +381,17 @@ class solve_aerosol(object):
                                   self.vaa,
                                   self.aot, 
                                   self.tcwv,
-                  self.tco3, 
+                                  self.tco3, 
                                   self.elevation,
-                  self.aot_unc,
-                  self.tcwv_unc,
-                  self.tco3_unc,
-                  self.s2_boa_unc,
-                  self.Hx, self.Hy,
+                                  self.aot_unc,
+                                  self.tcwv_unc,
+                                  self.tco3_unc,
+                                  self.s2_boa_unc,
+                                  self.Hx, self.Hy,
                                   self.mask,
-                  self.full_res,
-                  self.aero_res,
-                  self.emus,
+                                  self.full_res,
+                                  self.aero_res,
+                                self.emus,
                                   self.band_indexs,
                                   self.boa_bands,
                                   gamma = 2.)
