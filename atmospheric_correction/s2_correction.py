@@ -32,6 +32,7 @@ class atmospheric_correction(object):
                  s2_toa_dir  = '/home/ucfafyi/DATA/S2_MODIS/s_data/',
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
                  emus_dir    = '/home/ucfafyi/DATA/Multiply/emus/',
+                 satellite   = 'S2A',
                  reconstruct_s2_angle = True
                  ):              
         
@@ -42,6 +43,7 @@ class atmospheric_correction(object):
         self.s2_toa_dir  = s2_toa_dir
         self.global_dem  = global_dem
         self.emus_dir    = emus_dir
+        self.satellite   = satellite
         self.sur_refs     = {}
         self.reconstruct_s2_angle = reconstruct_s2_angle
         self.logger = logging.getLogger('Sentinel 2 Atmospheric Correction')
@@ -53,9 +55,14 @@ class atmospheric_correction(object):
             ch.setFormatter(formatter)
             self.logger.addHandler(ch)
     def _load_xa_xb_xc_emus(self,):
+        '''
         xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xap.pkl'%(self.s2_sensor))[0]
         xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xbp.pkl'%(self.s2_sensor))[0]
         xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xcp.pkl'%(self.s2_sensor))[0]
+        '''
+        xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xap_%s.pkl'%(self.s2_sensor, self.satellite))[0]
+        xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xbp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
+        xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xcp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
         if sys.version_info >= (3,0):
             f = lambda em: pkl.load(open(em, 'rb'), encoding = 'latin1')
         else:
@@ -72,7 +79,7 @@ class atmospheric_correction(object):
     def atmospheric_correction(self,):
 
         self.logger.propagate = False
-        self.s2_sensor = 'msi'
+        self.s2_sensor = 'MSI'
         self.logger.info('Loading emulators.')
         self._load_xa_xb_xc_emus()
         self.s2   = read_s2(self.s2_toa_dir, self.s2_tile, \
@@ -102,17 +109,23 @@ class atmospheric_correction(object):
                              self.saa, self._10meter_vaa, self._10meter_aod,\
                              self._10meter_tcwv, self._10meter_tco3, self._10meter_ele,\
                              self._10meter_band_indexs)     
-        self.toa_rgb = clip(self._10meter_ref[[2,1,0], ...].transpose(1,2,0)*255/0.255, 0., 255.).astype(uint8)
-        self.boa_rgb = clip(self.boa         [[2,1,0], ...].transpose(1,2,0)*255/0.255, 0., 255.).astype(uint8)
+        
+        mask         = (self._10meter_ref[[2,1,0], ...] >= 0)
+        self.scale   = np.percentile(self._10meter_ref[[2,1,0], ...][self._10meter_ref[[2,1,0], ...]>0], 95) #self._10meter_ref[[2,1,0], ...][mask].mean() + 3 * self._10meter_ref[[2,1,0], ...][mask].std()
+        self.toa_rgb = clip(self._10meter_ref[[2,1,0], ...].transpose(1,2,0)*255/self.scale, 0., 255.).astype(uint8)
+        self.boa_rgb = clip(self.boa         [[2,1,0], ...].transpose(1,2,0)*255/self.scale, 0., 255.).astype(uint8)
         self._save_rgb(self.toa_rgb, 'TOA_RGB.tif', self.s2.s2_file_dir+'/B04.jp2')
         self._save_rgb(self.boa_rgb, 'BOA_RGB.tif', self.s2.s2_file_dir+'/B04.jp2')
+        
+        gdal.Translate(self.s2.s2_file_dir+'/TOA_overview.jpg', self.s2.s2_file_dir+'/TOA_RGB.tif', format = 'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic', creationOptions = ['COMPRESS=JPEG', 'PHOTOMETRIC=YCBCR']).FlushCache()
+        gdal.Translate(self.s2.s2_file_dir+'/BOA_overview.jpg', self.s2.s2_file_dir+'/BOA_RGB.tif', format = 'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic', creationOptions = ['COMPRESS=JPEG', 'PHOTOMETRIC=YCBCR']).FlushCache()
 
         del self._10meter_ref; del self._10meter_vza; del self._10meter_vaa; del self._10meter_aod; \
         del self._10meter_tcwv; del self._10meter_tco3; del self._10meter_ele
         
-	#self.sur_refs.update(dict(zip(['B02', 'B03', 'B04', 'B08'], self.boa)))
+        #self.sur_refs.update(dict(zip(['B02', 'B03', 'B04', 'B08'], self.boa)))
         self._save_img(self.boa, ['B02', 'B03', 'B04', 'B08']); del self.boa 
-	  
+          
         self.logger.info('Doing 20 meter bands')
         self._20meter_ref = np.array([all_refs[band].astype(float)/10000. for band \
                                       in ['B05', 'B06', 'B07', 'B8A', 'B11', 'B12']])
@@ -181,18 +194,35 @@ class atmospheric_correction(object):
         g            = gdal.Open(source_image)
         projection   = g.GetProjection()
         geotransform = g.GetGeoTransform()
-        nx, ny = rgb_array.shape[:2]
+        nx, ny       = rgb_array.shape[:2]
         outputFileName = self.s2.s2_file_dir+'/%s'%name
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 3, gdal.GDT_Byte)
+        dst_ds = gdal.GetDriverByName('MEM').Create('', ny, nx, 3, gdal.GDT_Byte)
         dst_ds.SetGeoTransform(geotransform)
         dst_ds.SetProjection(projection)
         dst_ds.GetRasterBand(1).WriteArray(rgb_array[:,:,0])
+        dst_ds.GetRasterBand(1).SetScale(self.scale)
         dst_ds.GetRasterBand(2).WriteArray(rgb_array[:,:,1])
+        dst_ds.GetRasterBand(2).SetScale(self.scale)
         dst_ds.GetRasterBand(3).WriteArray(rgb_array[:,:,2])
+        dst_ds.GetRasterBand(3).SetScale(self.scale)
+        gdal.Translate(outputFileName, dst_ds, creationOptions = ['COMPRESS=JPEG', 'TILED=YES']).FlushCache()
         dst_ds.FlushCache()
         dst_ds = None
+
+    def rgb_scale_offset(arr):
+        arrmin = arr.mean() - 3*arr.std()
+        arrmax = arr.mean() + 3*arr.std()
+        arrlen = arrmax-arrmin
+        scale  = arrlen/255.0
+        offset = arrmin
+        return offset, scale
+        #arr = clip(arr, arrmin, arrmax)
+        #scale = 255.0
+        #scaledArr = (arr-arrmin).astype(float32) / float32(arrlen) * scale
+        #arr = (scaledArr.astype(uint8))
+        #img = Image.fromarray(arr)
 
     def _save_img(self, refs, bands):
         g            = gdal.Open(self.s2.s2_file_dir+'/%s.jp2'%bands[0])
@@ -208,10 +238,18 @@ class atmospheric_correction(object):
         outputFileName = self.s2.s2_file_dir+'/%s_sur.tif'%band
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32)
-        dst_ds.SetGeoTransform(geotransform)    
-        dst_ds.SetProjection(projection) 
-        dst_ds.GetRasterBand(1).WriteArray(ref)
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Int16)
+        dst_ds.SetGeoTransform(geotransform)
+        dst_ds.SetProjection(projection)
+        sur = ref * 10000
+        sur[~(sur>=0)] = -9999
+        sur = sur.astype(np.int16)
+        dst_ds.GetRasterBand(1).SetNoDataValue(-9999)
+        dst_ds.GetRasterBand(1).WriteArray(sur)
+        #dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32)
+        #dst_ds.SetGeoTransform(geotransform)    
+        #dst_ds.SetProjection(projection) 
+        #dst_ds.GetRasterBand(1).WriteArray(ref)
         dst_ds.FlushCache()                  
         dst_ds = None
 
@@ -299,5 +337,5 @@ class atmospheric_correction(object):
         return small_data
 
 if __name__=='__main__':
-    atmo_cor = atmospheric_correction(2017, 9, 4, '29SQB')
+    atmo_cor = atmospheric_correction(2017, 12, 15, '32UPU', s2_toa_dir='/data/nemesis/S2_data/')
     atmo_cor.atmospheric_correction()

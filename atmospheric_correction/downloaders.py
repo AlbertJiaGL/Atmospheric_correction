@@ -11,6 +11,12 @@ from grab_brdf import get_hv
 from multi_process import parmap
 from datetime import datetime, timedelta
 from get_tile_lat_lon import get_tile_lat_lon
+from sentinel_downloader import download_sentinel_amazon
+
+def down_s2(tile, s2_dir, year, month, day):
+    download_sentinel_amazon(datetime(year, month, day), \
+                             s2_dir, tile = tile, clouds=100,\
+                             end_date=datetime(year, month, day) )
 
 def downloader(url_root, fname, file_dir):
     new_url = url_root + fname
@@ -21,13 +27,13 @@ def downloader(url_root, fname, file_dir):
             if chunk:
                 fp.write(chunk)
 
-def down_s2_emus(emus_dir):
+def down_s2_emus(emus_dir, satellite):
     url = 'http://www2.geog.ucl.ac.uk/~ucfafyi/emus/'
     req = requests.get(url)
     for line in req.text.split():
         if '.pkl' in line:
             fname   = line.split('"')[1].split('<')[0]
-            if 'S2' in fname:
+            if satellite in fname:
                 downloader(url, fname, emus_dir)
 
 def down_l8_emus(emus_dir):
@@ -45,7 +51,7 @@ def down_cams(cams_dir, cams_file):
 
 def down_dem(eles_dir, example_file):
     lats, lons = get_tile_lat_lon(example_file)
-    url = 'http://www2.geog.ucl.ac.uk/~ucfafyi/eles/'
+    #url = 'http://www2.geog.ucl.ac.uk/~ucfafyi/eles/'
     min_lon, max_lon = np.floor(min(lons)), np.ceil(max(lons))
     min_lat, max_lat = np.floor(min(lats)), np.ceil(max(lats))
     rebuilt_vrt = False
@@ -61,10 +67,13 @@ def down_dem(eles_dir, example_file):
                 lon_str = 'W%03d'%(int(abs(lo)))
             fname = 'ASTGTM2_%s%s_dem.tif'%(lat_str, lon_str)
             if len(glob(os.path.join(eles_dir, fname)))==0:
-                downloader(url, fname, eles_dir)
-                rebuilt_vrt = True
-    if rebuilt_vrt:
-        gdal.BuildVRT(eles_dir + '/global_dem.vrt', glob(eles_dir +'/*.tif'), outputBounds = (-180,-90,180,90)).FlushCache()
+                return '/vsicurl/http://www2.geog.ucl.ac.uk/~ucfafyi/eles/global_dem.vrt'
+            else:
+                return 0
+                #downloader(url, fname, eles_dir)
+                #rebuilt_vrt = True
+    #if rebuilt_vrt:
+    #    gdal.BuildVRT(eles_dir + '/global_dem.vrt', glob(eles_dir +'/*.tif'), outputBounds = (-180,-90,180,90)).FlushCache()
     
 def down_s2_modis(modis_dir, s2_dir):
     date  = datetime.strptime('-'.join(s2_dir.split('/')[-5:-2]), '%Y-%m-%d')

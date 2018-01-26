@@ -171,9 +171,9 @@ class solve_aerosol(object):
             boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, self.example_file, \
                                                            self.year, self.doy, [l8.saa_sza, l8.vaa_vza], 
                                                            sun_view_ang_scale=[0.01, 0.01], bands = [3,4,1,2,6,7], tolz=0.003)
-            np.savez(self.l8_toa_dir + 'MCD43_%s.npz'%l8.header, boa=boa, unc=unc, hx=hx, hy=hy, lx=lx, ly=ly, flist=flist) 
+            np.savez(self.l8_toa_dir + '/MCD43_%s.npz'%l8.header, boa=boa, unc=unc, hx=hx, hy=hy, lx=lx, ly=ly, flist=flist) 
         else:
-            f = np.load(self.l8_toa_dir + 'MCD43_%s.npz'%l8.header)
+            f = np.load(self.l8_toa_dir + '/MCD43_%s.npz'%l8.header, encoding='latin1')
             boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist']
         self.Hx, self.Hy = hx, hy
         self.logger.info('Applying spectral transform.')
@@ -201,7 +201,7 @@ class solve_aerosol(object):
 
         self.logger.info('Getting pripors from ECMWF forcasts.')
         self.aot, self.tcwv, self.tco3    = np.array(self._read_cams(self.example_file))
-        self.logger.info('Mean values of priors are: %.02f, %.02f, %.02f'%\
+        self.logger.info('Mean values of priors are: %.03f, %.03f, %.03f'%\
                          (np.nanmean(self.aot), np.nanmean(self.tcwv), np.nanmean(self.tco3)))
         self.toa        = l8._get_toa()
         self.saa, self.sza, self.vaa, self.vza = l8._get_angles()
@@ -335,11 +335,11 @@ class solve_aerosol(object):
             red_inputs  = np.array([red_sza,  red_vza,  red_raa,  zero_aod, tcwv[Hx, Hy], tco3[Hx, Hy], ele_data[Hx, Hy]])
             blue_inputs = np.array([blue_sza, blue_vza, blue_raa, zero_aod, tcwv[Hx, Hy], tco3[Hx, Hy], ele_data[Hx, Hy]])
             
-            p           = np.r_[np.arange(0.0001, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
+            p           = np.r_[np.arange(0.001, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
             f           =  lambda aot: self._ddv_cost(aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus)
             costs       = parmap(f, p)
             min_ind     = np.argmin(costs)
-            self.logger.info('DDV solved aod is %.02f, and it will used as the mean value for cams prediction.'% p[min_ind])
+            self.logger.info('DDV solved aod is %.03f, and it will used as the mean value for cams prediction.'% p[min_ind])
             self.aot[:] = p[min_ind]
 
     def _ddv_cost(self, aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus):

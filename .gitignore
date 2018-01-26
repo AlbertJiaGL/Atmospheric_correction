@@ -1,5 +1,7 @@
 *.pyc
 *validation*
+task*
+.nfs*
 munich.sh
 *.tif
 *.nc

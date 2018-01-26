@@ -45,6 +45,7 @@ class solve_aerosol(object):
                  wv_emus_dir = '/home/ucfafyi/DATA/Multiply/emus/wv_msi_retrieval_S2.pkl',
                  cams_dir    = '/home/ucfafyi/DATA/Multiply/cams/',
                  mod08_dir   = '/home/ucfafyi/DATA/Multiply/mod08/',
+                 satellite   = 'S2A',
                  s2_tile     = '29SQB',
                  s2_psf      = None,
                  qa_thresh   = 255,
@@ -64,6 +65,7 @@ class solve_aerosol(object):
         self.wv_emus_dir = wv_emus_dir
         self.cams_dir    = cams_dir
         self.mod08_dir   = mod08_dir 
+        self.satellite   = satellite
         self.s2_tile     = s2_tile
         self.s2_psf      = s2_psf 
         self.s2_u_bands  = 'B02', 'B03', 'B04', 'B08', 'B11', 'B12', 'B8A', 'B09' #bands used for the atmo-cor
@@ -76,9 +78,14 @@ class solve_aerosol(object):
         self.s2_spectral_transform = [[ 1.06946607,  1.03048916,  1.04039226,  1.00163932,  1.00010918, 0.95607606,  0.99951677],
                                       [ 0.0035921 , -0.00142761, -0.00383504, -0.00558762, -0.00570695, 0.00861192,  0.00188871]]       
     def _load_xa_xb_xc_emus(self,):
+        '''
         xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xap.pkl'%(self.s2_sensor))[0]
         xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xbp.pkl'%(self.s2_sensor))[0]
         xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xcp.pkl'%(self.s2_sensor))[0]
+        '''
+        xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xap_%s.pkl'%(self.s2_sensor, self.satellite))[0]
+        xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xbp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
+        xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xcp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
         if sys.version_info >= (3,0):
             f = lambda em: pkl.load(open(em, 'rb'), encoding = 'latin1')
         else:
@@ -115,24 +122,33 @@ class solve_aerosol(object):
             wv_emus   = pkl.load(open(self.wv_emus_dir, 'rb'))
         except:
             wv_emus   = pkl.load(open(self.wv_emus_dir, 'rb'), encoding = 'latin1')
+        up, bot = wv_emus.inputs.max(axis=0), wv_emus.inputs.min(axis=0)
         vza, vaa  = vza['B09'][self.Hx, self.Hy], vaa['B09'][self.Hx, self.Hy]
         sza, saa  = sza[self.Hx, self.Hy], saa[self.Hx, self.Hy]
         elevation = ele[self.Hx, self.Hy]
-        inputs    = np.array([b9, b8a, vza, sza, abs(saa-vaa), elevation]).T
-        tcwv_mask = ( b8a < 0.1 ) | self.cloud[self.Hx, self.Hy]
-        tcwv      = np.zeros(self.full_res)
-        tcwv[:]   = np.nan
-        tcwv_unc  = tcwv.copy()
-        s2_tcwv, s2_tcwv_unc, _ = wv_emus.predict(inputs, do_unc = True)
-        if tcwv_mask.sum() >= 1:
-            s2_tcwv[tcwv_mask]  = np.interp(np.flatnonzero( tcwv_mask), \
-                        np.flatnonzero(~tcwv_mask), s2_tcwv[~tcwv_mask]) # simple interpolation
-        tcwv    [self.Hx, self.Hy] = s2_tcwv
-        tcwv_unc[self.Hx, self.Hy] = s2_tcwv_unc
-        self.tcwv                  = np.nanmean(tcwv    .reshape(self.num_blocks, self.block_size, \
-                                     self.num_blocks, self.block_size), axis = (3,1))
-        self.tcwv_unc              = np.nanmax (tcwv_unc.reshape(self.num_blocks, self.block_size, \
-                                     self.num_blocks, self.block_size), axis = (3,1)) + 0.05
+        raa       = abs(saa-vaa)
+        inputs    = np.array([b9, b8a, sza, vza, raa, elevation]).T
+        tcwv_mask = ( b8a < 0.1 ) | self.cloud[self.Hx, self.Hy] | (b8a > up[1]) | (b9 > up[0]) | (b9 < bot[0]) | \
+                                                                   (sza > up[2]) | (sza < bot[2]) | (vza > up[3]) | \
+                                                                   (vza < bot[3]) | (raa > up[4]) | (raa < bot[4]) | \
+                                                                   (elevation > up[5]) | (elevation < bot[5])
+        if tcwv_mask.all():
+            self.s2_logger.warning('Inputs values for WV emulator are out of tainning ranges and ECMWF tcwv is used.')
+            #pass
+        else:
+            tcwv      = np.zeros(self.full_res)
+            tcwv[:]   = np.nan
+            tcwv_unc  = tcwv.copy()
+            s2_tcwv, s2_tcwv_unc, _ = wv_emus.predict(inputs, do_unc = True)
+            if tcwv_mask.sum() >= 1:
+                s2_tcwv[tcwv_mask]  = np.interp(np.flatnonzero( tcwv_mask), \
+                            np.flatnonzero(~tcwv_mask), s2_tcwv[~tcwv_mask]) # simple interpolation
+            tcwv    [self.Hx, self.Hy] = s2_tcwv
+            tcwv_unc[self.Hx, self.Hy] = s2_tcwv_unc
+            self.tcwv                  = np.nanmean(tcwv    .reshape(self.num_blocks, self.block_size, \
+                                                                     self.num_blocks, self.block_size), axis = (3,1))
+            self.tcwv_unc              = np.nanmax (tcwv_unc.reshape(self.num_blocks, self.block_size, \
+                                                                     self.num_blocks, self.block_size), axis = (3,1)) + 0.05
     def _get_psf(self, selected_img):
         self.s2_logger.info('No PSF parameters specified, start solving.')
         high_img    = np.repeat(np.repeat(selected_img['B11'], 2, axis=0), 2, axis=1)*0.0001
@@ -177,9 +193,9 @@ class solve_aerosol(object):
     def _get_ddv_aot(self, selected_img, tcwv, tco3, ele_data):
         b2, b4,   = selected_img['B02']/10000., selected_img['B04']/10000.
         b8, b12   = selected_img['B08']/10000., np.repeat(np.repeat(selected_img['B12']/10000., 2, axis=0), 2, axis=1)
-        ndvi_mask = (((b8 - 0.5 * b12)/(b8 + 0.5 * b12)) > 0.4) & (b12 > 0.01) & (b12 < 0.25) & (~self.cloud)
+        ndvi_mask = (((b8 - b4)/(b8 + b4)) > 0.4) & (b12 > 0.01) & (b12 < 0.25) & (~self.cloud)
         if ndvi_mask.sum() < 100:
-            self.s2_logger.info('No enough DDV found in this sence for aot restieval, and only cams prediction are used.')
+            self.s2_logger.info('No enough DDV found in this sence for aot restieval, and ECWMF AOT is used.')
         else:
             Hx, Hy = np.where(ndvi_mask)
             if ndvi_mask.sum() > 1000:
@@ -205,12 +221,14 @@ class solve_aerosol(object):
             red_inputs  = np.array([red_sza,  red_vza,  red_raa,  zero_aod, tcwv[nHx, nHy], tco3[nHx, nHy], ele_data[Hx, Hy]])
             blue_inputs = np.array([blue_sza, blue_vza, blue_raa, zero_aod, tcwv[nHx, nHy], tco3[nHx, nHy], ele_data[Hx, Hy]])
 
-            p           = np.r_[np.arange(0.001, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
-            f           =  lambda aot: self._ddv_cost(aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus)
+            p           = np.r_[np.arange(0., 0.01, 0.0001), np.arange(0.01, 1., 0.02), np.arange(1., 1.5, 0.05),  np.arange(1.5, 2., 0.1)]
+            f           = lambda aot: self._ddv_cost(aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus)
             costs       = parmap(f, p)
             min_ind     = np.argmin(costs)
-            self.s2_logger.info('DDV solved aod is %.02f, and it will be used as the mean value of cams prediction.'% p[min_ind])
-            self.aot[:] = p[min_ind]
+            self.s2_logger.info('DDV solved aod is %.03f.'% p[min_ind])
+            #mod08_aot   = self._mod08_aot()
+            #print(mod08_aot, self.aot.mean(), p[min_ind])
+            self.aot[:] = p[min_ind]#np.nanmean([mod08_aot, self.aot.mean(), p[min_ind]])
 
     def _ddv_cost(self, aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus):
         blue_inputs[3, :] = aot
@@ -296,17 +314,18 @@ class solve_aerosol(object):
         self.aot        = aot.copy()
         self._get_ddv_aot(selected_img, tcwv, tco3, ele_data)
         self.tco3       = tco3 * 46.698
-        tcwv            = tcwv / 10. 
+        self.tcwv       = tcwv / 10. 
+        self.aot_unc    = np.ones(self.aot.shape)  * 0.8
+        self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.2
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.2
-        self.aot_unc    = np.ones(self.aot.shape)  * 1.
         self.s2_logger.info('Trying to get the tcwv from the emulation of sen2cor look up table.')
         try:
             self._get_tcwv(selected_img, self.s2.angles['vza'], self.s2.angles['vaa'], self.s2.angles['sza'], self.s2.angles['saa'], ele_data)
         except:
-            self.s2_logger.warning('Getting tcwv from the emulation of sen2cor look up table failed, ECMWF data used.')
-            self.tcwv     = tcwv
-            self.tcwv_unc = np.ones(self.tcwv.shape) * 0.2
-        self.s2_logger.info('Mean values for priors are: %.02f, %.02f, %.02f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
+            self.s2_logger.warning('Getting tcwv from the emulation of sen2cor look up table failed, ECMWF TCWV is used.')
+            #self.tcwv     = tcwv
+            #self.tcwv_unc = np.ones(self.tcwv.shape) * 0.2
+        self.s2_logger.info('Mean values for priors are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
         self.s2_logger.info('Applying PSF model.')
         if self.s2_psf is None:
             xstd, ystd, ang, xs, ys = self._get_psf(selected_img)
@@ -368,35 +387,36 @@ class solve_aerosol(object):
         mask = ~self.dcloud
         self.mask = mask.reshape(self.num_blocks, self.block_size, \
                                  self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        self.mask = ((self.mask/((1.*self.block_size)**2)) >= 0.5) & ((tempm/((self.aero_res/500.)**2)) >= 0.5)
+        self.mask = ((self.mask/((1.*self.block_size)**2)) >= 0.) & ((tempm/((self.aero_res/500.)**2)) >= 0.)
         self.mask = binary_erosion(self.mask, structure=np.ones((3,3)).astype(bool))
         if self.mask.sum() ==0:
             self.s2_logger.info('No valid value is found for retrieval of atmospheric parameters and priors are stored.')
             return np.array([[self.aot, self.tcwv, self.tco3], ])
-        self.aero = solving_atmo_paras(self.s2_boa, 
-                                  self.s2_toa,
-                                  self.sza, 
-                                  self.vza,
-                                  self.saa, 
-                                  self.vaa,
-                                  self.aot, 
-                                  self.tcwv,
-                                  self.tco3, 
-                                  self.elevation,
-                                  self.aot_unc,
-                                  self.tcwv_unc,
-                                  self.tco3_unc,
-                                  self.s2_boa_unc,
-                                  self.Hx, self.Hy,
-                                  self.mask,
-                                  self.full_res,
-                                  self.aero_res,
-                                self.emus,
-                                  self.band_indexs,
-                                  self.boa_bands,
-                                  gamma = 2.)
-        solved    = self.aero._optimization()
-        return solved
+        else:
+            self.aero = solving_atmo_paras(self.s2_boa, 
+                                           self.s2_toa,
+                                           self.sza, 
+                                           self.vza,
+                                           self.saa, 
+                                           self.vaa,
+                                           self.aot, 
+                                           self.tcwv,
+                                           self.tco3, 
+                                           self.elevation,
+                                           self.aot_unc,
+                                           self.tcwv_unc,
+                                           self.tco3_unc,
+                                           self.s2_boa_unc,
+                                           self.Hx, self.Hy,
+                                           self.mask,
+                                           self.full_res,
+                                           self.aero_res,
+                                           self.emus,
+                                           self.band_indexs,
+                                           self.boa_bands,
+                                           gamma = 2.)
+            solved    = self.aero._optimization()
+            return solved
 
     def _read_cams(self, example_file, parameters = ['aod550', 'tcwv', 'gtco3']):
         netcdf_file = datetime.datetime(self.sen_time.year, self.sen_time.month, \
@@ -437,8 +457,8 @@ class solve_aerosol(object):
             self.s2_logger.addHandler(ch)
         self.s2_logger.propagate = False
 
-        self.s2_sensor  = 'msi'
-        self.s2_logger.info('Doing Sentinel 2 tile: %s on %d-%02d-%02d.'%(self.s2_tile, self.year, self.month, self.day))
+        self.s2_sensor  = 'MSI'
+        self.s2_logger.info('Doing Sentinel %s tile: %s on %d-%02d-%02d.'%(self.satellite, self.s2_tile, self.year, self.month, self.day))
         self.block_size = int(self.aero_res/10)
         self.num_blocks = int(np.ceil(self.full_res[0]/self.block_size)) 
         self.solved     = self._s2_aerosol()[0].reshape(3, self.num_blocks, self.num_blocks)
@@ -447,9 +467,12 @@ class solve_aerosol(object):
         xmin, ymax = g.GetGeoTransform()[0], g.GetGeoTransform()[3]
         projection = g.GetProjection()
         para_names = 'aot', 'tcwv', 'tco3'
-        priors = [self.aot, self.tcwv, self.tco3]
+        #priors = [self.aot, self.tcwv, self.tco3]
         for i,para_map in enumerate(self.solved):
-            self.solved[i][~self.mask] = np.nanmean(self.solved[i][self.mask])
+            if self.mask.sum() > 0:
+                self.solved[i][~self.mask] = np.nanmean(self.solved[i][self.mask])
+            else:
+                continue
             xres, yres = self.block_size*10, self.block_size*10
             geotransform = (xmin, xres, 0, ymax, 0, -yres)
             nx, ny = self.num_blocks, self.num_blocks
@@ -465,6 +488,6 @@ class solve_aerosol(object):
         self.aot_map, self.tcwv_map, self.tco3_map = self.solved
 
 if __name__ == "__main__":
-    aero = solve_aerosol( 2016, 10, 30, mcd43_dir = '/data/selene/ucfajlg/Hebei/MCD43/', s2_toa_dir = '/store/S2_data/',\
-                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='50SLG', s2_psf=None)
+    aero = solve_aerosol( 2017, 7, 28, mcd43_dir = '/store/MCD43/', s2_toa_dir = '/store/S2_data/',\
+                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='40RBN', s2_psf=None)
     aero.solving_s2_aerosol()

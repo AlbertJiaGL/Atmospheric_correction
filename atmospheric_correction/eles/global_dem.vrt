@@ -4,6 +4,20 @@
   <VRTRasterBand dataType="Int16" band="1">
     <ColorInterp>Gray</ColorInterp>
     <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N49E010_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="683999.5" yOff="143999.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N49E012_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="691199.5" yOff="143999.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
       <SourceFilename relativeToVRT="1">ASTGTM2_N43W099_dem.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
@@ -142,6 +156,230 @@
       <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
       <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
       <DstRect xOff="305999.5" yOff="154799.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N44E072_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="907199.5" yOff="161999.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N44E073_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="910799.5" yOff="161999.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N44E074_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="914399.5" yOff="161999.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N44E075_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="917999.5" yOff="161999.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N44E076_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="921599.5" yOff="161999.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N45E072_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="907199.5" yOff="158399.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N45E073_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="910799.5" yOff="158399.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N45E074_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="914399.5" yOff="158399.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N45E075_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="917999.5" yOff="158399.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N45E076_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="921599.5" yOff="158399.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N46E072_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="907199.5" yOff="154799.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N46E073_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="910799.5" yOff="154799.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N46E074_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="914399.5" yOff="154799.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N46E075_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="917999.5" yOff="154799.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N46E076_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="921599.5" yOff="154799.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E072_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="907199.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E073_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="910799.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E074_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="914399.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E075_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="917999.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E076_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="921599.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E072_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="907199.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E073_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="910799.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E074_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="914399.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E075_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="917999.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E076_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="921599.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E010_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="683999.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E011_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="687599.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N47E012_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="691199.5" yOff="151199.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E010_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="683999.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E011_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="687599.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N48E012_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="691199.5" yOff="147599.5" xSize="3601" ySize="3601" />
+    </SimpleSource>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">ASTGTM2_N49E011_dem.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="687599.5" yOff="143999.5" xSize="3601" ySize="3601" />
     </SimpleSource>
   </VRTRasterBand>
 </VRTDataset>

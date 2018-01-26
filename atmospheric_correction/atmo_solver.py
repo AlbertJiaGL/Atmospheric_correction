@@ -36,7 +36,7 @@ class solving_atmo_paras(object):
                  band_wavelength,
                  pix_res = 10.,
                  gamma   = 0.5,
-                 alpha   = -1.6,# from nasa modis climatology
+                 alpha   = -1.4,# from nasa modis climatology
                  subsample = 1,
                  subsample_start = 0
                  ):
@@ -128,8 +128,8 @@ class solving_atmo_paras(object):
         self.xbp_emus    = self.emus[1][self.band_indexs]
         self.xcp_emus    = self.emus[2][self.band_indexs]
         self.up_bounds   = self.xap_emus[0].inputs[:,3:6].max(axis=0)
-        self.bot_bounds  = self.xap_emus[0].inputs[:,3:6].min(axis=0)
-        self.bot_bounds[0] = 0.001
+        self.bot_bounds  = self.xap_emus[0].inputs[:,3:6].min(axis=0) 
+        self.bot_bounds[:] = 0.
         #self.uncs        = self.uncs  [:, self.resample_hx, self.resample_hx]
         #self.priors      = self.priors[:, self.resample_hx, self.resample_hx]
         y                = np.zeros((self.num_blocks_x, self.num_blocks_y))

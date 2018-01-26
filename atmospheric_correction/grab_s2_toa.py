@@ -101,7 +101,7 @@ class read_s2(object):
                                              format="MEM", xRes=xRes, yRes=yRes, where="maskType='OPAQUE'", \
                                              outputBounds=[xmin, ymin, xmax, ymax], noData=np.nan, burnValues=2).ReadAsArray()
                 else:
-                    self.cirrus = np.zeros((x_size, y_size)).astype(bool)
+                    self.cloud = np.zeros((x_size, y_size)).astype(bool)
             except:
                 self.cloud  = np.zeros((x_size, y_size)).astype(bool)
             cloud_mask  = self.cirrus + self.cloud
@@ -242,8 +242,14 @@ class read_s2(object):
             self.vza[band]   = np.repeat(np.repeat(g_vza, 500, axis = 0), 500, axis = 1)[:10980, :10980]
             g_vaa[g_vaa>180] = g_vaa[g_vaa>180] - 360
             self.vaa[band]   = np.repeat(np.repeat(g_vaa, 500, axis = 0), 500, axis = 1)[:10980, :10980]
-            self.mvz[band]   = mvz_[band]
+            self.mvz[band]   = mvz_[band] 
             self.mva[band]   = mva_[band]
+            # seems like scene containing positive and negative vaa
+            # is more likely to have the wrong vaa angle and the mean value is used
+            if not ((self.vaa[band] <= 0).all() or (self.vaa[band] >= 0).all()):
+                reconstruct = False # no need for reconstruct anymore
+                self.vaa[band][:]                    = self.mva[band]
+                self.vaa[band][self.vaa[band] > 180] = self.vaa[band][self.vaa[band] > 180] - 360
         self.angles = {'sza':self.sza, 'saa':self.saa, 'msz':self.msz, 'msa':self.msa,\
                            'vza':self.vza, 'vaa': self.vaa, 'mvz':self.mvz, 'mva':self.mva}
 
