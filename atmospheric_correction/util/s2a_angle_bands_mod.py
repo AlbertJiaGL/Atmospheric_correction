@@ -839,6 +839,8 @@ def s2a_angle(XML_File, subsamp=10):
             tmphdr = Dir + '/angles/VAA_VZA_'+ bandName + '.hdr' 
             os.remove(tmphdr)
             Hdr_File = WriteHeader( Out_File, out_rows, out_cols, AngleObs['ul_x'], AngleObs['ul_y'], gsd[band]*subsamp, AngleObs['zone'], AngleObs['hemis'] )
+            gdal.Translate(Out_File.replace('.img', '.tif'), Out_File, creationOptions = ['COMPRESS=LZW', 'TILED=YES']).FlushCache()
+            os.remove(Out_File); os.remove(Out_File+'.hdr')
         par = partial(loop, AngleObs=AngleObs, gsd=gsd, subsamp = subsamp, BandFoot=BandFoot, Orbit = Orbit,\
                       XML_File = XML_File, sul_lat=sul_lat, sul_lon = sul_lon, slr_lat = slr_lat,slr_lon = slr_lon)
         parmap(par, TimeParms)

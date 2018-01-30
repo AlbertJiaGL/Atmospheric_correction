@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 import sys
 sys.path.insert(0, '.')
@@ -9,6 +10,7 @@ from glob import glob
 from get_modis import get_modisfiles
 from grab_brdf import get_hv
 from multi_process import parmap
+from functools import partial
 from datetime import datetime, timedelta
 from get_tile_lat_lon import get_tile_lat_lon
 from sentinel_downloader import download_sentinel_amazon
@@ -18,7 +20,21 @@ def down_s2(tile, s2_dir, year, month, day):
                              s2_dir, tile = tile, clouds=100,\
                              end_date=datetime(year, month, day) )
 
-def downloader(url_root, fname, file_dir):
+def down_l8(header, l8_dir):
+    temp = 'https://landsat-pds.s3.amazonaws.com/c1/L8/%s/%s/%s/'
+    path, row = header.split('_')[2][:3], header.split('_')[2][3:]
+    root = temp%(path, row, header)
+    footer = ['B%d.TIF'%(band+1) for band in range(11)] + ['BQA.TIF', 'MTL.txt', 'ANG.txt']
+    fnames = [header + '_' + foot for foot in footer]
+    par = partial(downloader, url_root = root, file_dir = l8_dir)
+    parmap(par, fnames)
+    ndir = l8_dir + '/' + header
+    if not os.path.exists(ndir):
+        os.mkdir(ndir)
+    for i in fnames:
+        os.rename(l8_dir + '/' + i, ndir + '/' + i)
+
+def downloader(fname, url_root, file_dir):
     new_url = url_root + fname
     new_req = requests.get(new_url, stream=True)
     print('downloading %s' % fname)
@@ -34,7 +50,7 @@ def down_s2_emus(emus_dir, satellite):
         if '.pkl' in line:
             fname   = line.split('"')[1].split('<')[0]
             if satellite in fname:
-                downloader(url, fname, emus_dir)
+                downloader(fname, url, emus_dir)
 
 def down_l8_emus(emus_dir):
     url = 'http://www2.geog.ucl.ac.uk/~ucfafyi/emus/'
@@ -43,11 +59,11 @@ def down_l8_emus(emus_dir):
         if '.pkl' in line:
             fname   = line.split('"')[1].split('<')[0]
             if 'L8' in fname:
-                downloader(url, fname, emus_dir)
+                downloader(fname, url, emus_dir)
 
 def down_cams(cams_dir, cams_file):
     url = 'http://www2.geog.ucl.ac.uk/~ucfafyi/cams/'
-    downloader(url, cams_file, cams_dir)
+    downloader(cams_file, url, cams_dir)
 
 def down_dem(eles_dir, example_file):
     lats, lons = get_tile_lat_lon(example_file)
@@ -70,7 +86,7 @@ def down_dem(eles_dir, example_file):
                 return '/vsicurl/http://www2.geog.ucl.ac.uk/~ucfafyi/eles/global_dem.vrt'
             else:
                 return 0
-                #downloader(url, fname, eles_dir)
+                #downloader(fname, url, eles_dir)
                 #rebuilt_vrt = True
     #if rebuilt_vrt:
     #    gdal.BuildVRT(eles_dir + '/global_dem.vrt', glob(eles_dir +'/*.tif'), outputBounds = (-180,-90,180,90)).FlushCache()

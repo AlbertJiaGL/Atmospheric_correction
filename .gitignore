@@ -1,8 +1,10 @@
 *.pyc
+*redo*
 *validation*
 task*
 .nfs*
-munich.sh
+*barax*
+*munich*
 *.tif
 *.nc
 *.hdf

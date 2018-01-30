@@ -39,25 +39,37 @@ class read_l8(object):
         else:
             self.bands = np.array(bands)
         self.angle_exe = angle_exe
-        composite      = glob(self.toa_dir + '/LC08_L1TP_%03d%03d_%04d%02d%02d_*_01_??_[B,b]1.[T,t][I,i][F,f]' \
+        composite      = glob(self.toa_dir + '/LC08_L1TP_%03d%03d_%04d%02d%02d_*_01_??_[B, b]1.[T, t][I, i][F, f]' \
                          % ( self.tile[0], self.tile[1], self.year, self.month, self.day))[0].split('/')[-1].split('_')[:-1]
         self.header    = '_'.join(composite)    
-        self.toa_file  = [self.toa_dir + '/%s_b%d.tif'%(self.header, i) for i in self.bands]
-        self.mete_file =  self.toa_dir + '/%s_MTL.txt'%self.header 
-        self.qa_file   =  self.toa_dir + '/%s_bqa.tif'%self.header
+        self.toa_file  = [glob(self.toa_dir + '/%s_[b, B]%d.[T, t][I, i][F, f]'%(self.header, i))[0] for i in self.bands]
+        self.mete_file =  glob(self.toa_dir + '/%s_[m, M][t, T][l, L].[t, T][x, X][t, T]'%self.header)[0]
+        self.qa_file   =  glob(self.toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%self.header)[0]
         try:
-            self.saa_sza = [glob(self.toa_dir + '/%s_solar_B%02d.img' %(self.header, i))[0] for i in self.bands]
-            self.vaa_vza = [glob(self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i))[0] for i in self.bands]
+            self.saa_sza =  glob(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, self.bands[0]))
+            self.vaa_vza = [glob(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i))[0] for i in self.bands]
         except:
-            ang_file     = self.toa_dir + '/%s_ANG.txt'%self.header
+            ang_file     = glob(self.toa_dir + '/%s_[a, A][n, N][g, G].[t, T][x, X][t, T]'%self.header)[0]
             cwd = os.getcwd()
             os.chdir(self.toa_dir)
             f            =  lambda band: subprocess.call([self.angle_exe, ang_file, \
                                                           'BOTH', '1', '-f', '-32768', '-b', str(band)])
-            parmap(f, self.bands)
+            parmap(f, np.arange(1, 8))
             os.chdir(cwd)
-            self.saa_sza = [self.toa_dir + '/%s_solar_B%02d.img' %(self.header, i) for i in self.bands]
-            self.vaa_vza = [self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i) for i in self.bands]
+            self.saa_sza = []
+            #self.vaa_vza = []
+            for j, i in enumerate(np.arange(1, 8)):
+                if j==0:
+                    gdal.Translate(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, i), \
+                                   self.toa_dir + '/%s_solar_B%02d.img' %(self.header, i), \
+                                   creationOptions = ['COMPRESS=LZW', 'TILED=YES']).FlushCache()
+                    self.saa_sza.append(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, i))
+                gdal.Translate(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i), \
+                               self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i), \
+                               creationOptions = ['COMPRESS=LZW', 'TILED=YES']).FlushCache()
+                [os.remove(f) for f in glob(self.toa_dir + '/%s_sensor_B%02d.img*'%(self.header, i))]
+                [os.remove(f) for f in glob(self.toa_dir + '/%s_solar_B%02d.img*'%(self.header, i))]
+            self.vaa_vza = [self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i) for i in self.bands]
         try:
             scale, offset = self._get_scale()
         except:

@@ -69,7 +69,7 @@ class atmospheric_correction(object):
         self._load_xa_xb_xc_emus()
         l8   = read_l8(self.l8_toa_dir, self.l8_tile, self.year, self.month, self.day, bands = self.bands)
         self.l8_header = l8.header
-        self.example_file = self.l8_toa_dir + '/%s_b%d.tif'%(l8.header, 1)
+        self.example_file = glob(self.l8_toa_dir + '/%s_[b, B]%d.[t, T][i, I][f, F]'%(l8.header, 1))[0]
         self.logger.info('Reading in the reflectance.')
         self.toa = l8._get_toa()
         self.logger.info('Reading in the angles')
@@ -89,8 +89,9 @@ class atmospheric_correction(object):
         self.boa = np.array([i[2] for i in ret]).reshape(self._num_blocks_x, self._num_blocks_y, self.toa.shape[0], \
                              self._block_size, self._block_size).transpose(2,0,3,1,4).reshape(self.toa.shape[0], \
                              self._num_blocks_x*self._block_size, self._num_blocks_y*self._block_size)[:, : self.shape[0], : self.shape[1]]
-        self.boa[:, gdal.Open(self.l8_toa_dir + '/%s_bqa.tif'%l8.header).ReadAsArray() == 1] = np.nan
-        self.toa[:, gdal.Open(self.l8_toa_dir + '/%s_bqa.tif'%l8.header).ReadAsArray() == 1] = np.nan
+        
+        self.boa[:, gdal.Open(glob(self.l8_toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%l8.header)[0]).ReadAsArray() == 1] = np.nan
+        self.toa[:, gdal.Open(glob(self.l8_toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%l8.header)[0]).ReadAsArray() == 1] = np.nan
         self.boa_rgb = np.clip(self.boa[[3,2,1]].transpose(1,2,0) * 255 / 0.255, 0, 255).astype(uint8)
         self.toa_rgb = np.clip(self.toa[[3,2,1]].data.transpose(1,2,0) * 255 / 0.255, 0, 255).astype(uint8)
         self.logger.info('Saving corrected results')
@@ -98,6 +99,13 @@ class atmospheric_correction(object):
         self._save_rgb(self.boa_rgb, 'BOA_RGB', self.example_file)
         self._save_img(self.boa, self.bands)
 
+        gdal.Translate(self.l8_toa_dir + '/%s_%s'%(self.l8_header, 'BOA_overview.jpg'), \
+                       self.l8_toa_dir + '/%s_%s.tif'%(self.l8_header, 'BOA_RGB'), format = \
+                       'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic' ).FlushCache()
+
+        gdal.Translate(self.l8_toa_dir + '/%s_%s'%(self.l8_header, 'TOA_overview.jpg'), \
+                       self.l8_toa_dir + '/%s_%s.tif'%(self.l8_header, 'TOA_RGB'), format = \
+                       'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic' ).FlushCache()
  
     def _get_control_variables(self,):
 
@@ -140,7 +148,7 @@ class atmospheric_correction(object):
         outputFileName = self.l8_toa_dir + '/%s_%s.tif'%(self.l8_header, name)
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 3, gdal.GDT_Byte)
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 3, gdal.GDT_Byte, options=["TILED=YES", "COMPRESS=JPEG"])
         dst_ds.SetGeoTransform(geotransform)
         dst_ds.SetProjection(projection)
         dst_ds.GetRasterBand(1).WriteArray(rgb_array[:,:,0])

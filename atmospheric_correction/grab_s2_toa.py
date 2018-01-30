@@ -33,6 +33,7 @@ class read_s2(object):
                  s2_toa_dir,
                  s2_tile, 
                  year, month, day,
+                 acquisition = '0',
                  bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12', 'B8A']):
         self.s2_toa_dir = s2_toa_dir
         self.s2_tile    = s2_tile
@@ -44,7 +45,7 @@ class read_s2(object):
                           'B08','B8A', 'B09', 'B10', 'B11', 'B12' #all bands
         self.s2_file_dir = os.path.join(self.s2_toa_dir, self.s2_tile[:-3],\
                                         self.s2_tile[-3], self.s2_tile[-2:],\
-                                        str(self.year), str(self.month), str(self.day),'0')
+                                        str(self.year), str(self.month), str(self.day), acquisition)
         self.selected_img = None
         
     def get_s2_toa(self,vrt = False):
@@ -107,7 +108,7 @@ class read_s2(object):
             cloud_mask  = self.cirrus + self.cloud
             driver = gdal.GetDriverByName('GTiff')
             g1 = driver.Create(self.s2_file_dir+'/cloud.tif', \
-                               g.RasterXSize, g.RasterYSize, 1, gdal.GDT_Byte)
+                               g.RasterXSize, g.RasterYSize, 1, gdal.GDT_Byte,  options=["TILED=YES", "COMPRESS=JPEG"])
             projection   = g.GetProjection()
             geotransform = g.GetGeoTransform()
             g1.SetGeoTransform( geotransform )
@@ -215,14 +216,14 @@ class read_s2(object):
         vaa  = {}; vza  = {}
         mva_ = {}; mvz_ = {}
         for i, band in enumerate(self.s2_bands):
-            vaa[band]  = bands_vaa[i]
-            vza[band]  = bands_vza[i]
+            vaa[band]  = bands_vaa[i] if not np.isnan(bands_vaa[i]).all() else np.nanmean(bands_vaa, axis=0)
+            vza[band]  = bands_vza[i] if not np.isnan(bands_vza[i]).all() else np.nanmean(bands_vza, axis=0)
             try:
                 mva_[band] = mva[i]
                 mvz_[band] = mvz[i]
             except:
-                mva_[band] = np.nan
-                mvz_[band] = np.nan        
+                mva_[band] = np.nanmean([mva[z] for z in mva.keys()])
+                mvz_[band] = np.nanmean([mvz[z] for z in mvz.keys()])
 
         if self.bands is None:
             bands = self.s2_bands
@@ -232,30 +233,48 @@ class read_s2(object):
         self.mvz = {}; self.mva = {}
         for band in bands:
             mask  = np.isnan(vza[band])
-            g_vza = griddata(np.array(np.where(~mask)).T, vza[band][~mask], \
-                            (np.repeat(range(23), 23).reshape(23,23), \
-                             np.tile  (range(23), 23).reshape(23,23)), method='nearest')
-            mask  = np.isnan(vaa[band])              
-            g_vaa = griddata(np.array(np.where(~mask)).T, vaa[band][~mask], \
-                            (np.repeat(range(23), 23).reshape(23,23), \
-                             np.tile  (range(23), 23).reshape(23,23)), method='nearest') 
+            if (~mask).sum() == 0:
+                g_vza    = np.zeros((23, 23)) 
+                m_vza    = np.nanmean([mvz_[_] for _ in bands])
+                g_vaa[:] = m_vza      if not np.isnan(m_vza)      else 0
+                g_vza[:] = mvz_[band] if not np.isnan(mvz_[band]) else g_vaa[0, 0]
+                self.mvz[band]   = m_vza      if not np.isnan(m_vza)      else 0
+                self.mvz[band]   = mvz_[band] if not np.isnan(mvz_[band]) else self.mvz[band] 
+            else: 
+                g_vza = griddata(np.array(np.where(~mask)).T, vza[band][~mask], \
+                                (np.repeat(range(23), 23).reshape(23,23), \
+                                 np.tile  (range(23), 23).reshape(23,23)), method='nearest')
+            mask  = np.isnan(vaa[band]) 
+            if (~mask).sum() == 0:
+                g_vaa    = np.zeros((23, 23))
+                m_vaa    = np.nanmean([mva_[_] for _ in bands])
+                g_vaa[:] = m_vaa      if not np.isnan(m_vaa)      else 0
+                g_vaa[:] = mva_[band] if not np.isnan(mva_[band]) else g_vaa[0, 0]
+                self.mva[band]   = m_vaa      if not np.isnan(m_vaa)      else 0
+                self.mva[band]   = mva_[band] if not np.isnan(mva_[band]) else self.mva[band]
+            else:        
+                g_vaa = griddata(np.array(np.where(~mask)).T, vaa[band][~mask], \
+                                (np.repeat(range(23), 23).reshape(23,23), \
+                                 np.tile  (range(23), 23).reshape(23,23)), method='nearest') 
+                self.mvz[band]   = mvz_[band] 
+                self.mva[band]   = mva_[band]
             self.vza[band]   = np.repeat(np.repeat(g_vza, 500, axis = 0), 500, axis = 1)[:10980, :10980]
             g_vaa[g_vaa>180] = g_vaa[g_vaa>180] - 360
             self.vaa[band]   = np.repeat(np.repeat(g_vaa, 500, axis = 0), 500, axis = 1)[:10980, :10980]
-            self.mvz[band]   = mvz_[band] 
-            self.mva[band]   = mva_[band]
+
+
             # seems like scene containing positive and negative vaa
             # is more likely to have the wrong vaa angle and the mean value is used
             if not ((self.vaa[band] <= 0).all() or (self.vaa[band] >= 0).all()):
                 reconstruct = False # no need for reconstruct anymore
-                self.vaa[band][:]                    = self.mva[band]
+                self.vaa[band][:]                    = self.mva[band] 
                 self.vaa[band][self.vaa[band] > 180] = self.vaa[band][self.vaa[band] > 180] - 360
         self.angles = {'sza':self.sza, 'saa':self.saa, 'msz':self.msz, 'msa':self.msa,\
                            'vza':self.vza, 'vaa': self.vaa, 'mvz':self.mvz, 'mva':self.mva}
 
         if reconstruct:
             try:
-                if len(glob(self.s2_file_dir + '/angles/VAA_VZA_*.img')) == 13:
+                if len(glob(self.s2_file_dir + '/angles/VAA_VZA_*.tif')) == 13:
                     pass
                 else:
 		    #print 'Reconstructing Sentinel 2 angles...'
@@ -267,8 +286,8 @@ class read_s2(object):
                 else:
                     bands = self.bands
                 self.vaa = {}; self.vza = {}
-                fname = [self.s2_file_dir+'/angles/VAA_VZA_%s.img'%band for band in bands]
-                if len(glob(self.s2_file_dir + '/angles/VAA_VZA_*.img')) == 13:
+                fname = [self.s2_file_dir+'/angles/VAA_VZA_%s.tif'%band for band in bands]
+                if len(glob(self.s2_file_dir + '/angles/VAA_VZA_*.tif')) == 13:
                     f = lambda fn: reproject_data(fn, self.s2_file_dir+'/B04.jp2', outputType= gdal.GDT_Float32).data
                     ret = parmap(f, fname)
                     for i,angs in enumerate(ret):
@@ -289,8 +308,8 @@ class read_s2(object):
                 print('Reconstruct failed and original angles are used.')
 if __name__ == '__main__':
     
-    s2 = read_s2('/store/S2_data/', '32UPU', \
-                  2017, 10, 19, bands = ['B02', 'B03', 'B04', 'B08', 'B11'] )
+    s2 = read_s2('/store/S2_data/', '50SLH', \
+                  2016, 3, 14, bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12'] )
     '''
     s2.selected_img = s2.get_s2_toa() 
     s2.get_s2_cloud()

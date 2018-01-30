@@ -166,7 +166,7 @@ class solve_aerosol(object):
         self.logger.info('Loading emulators.')
         self._load_xa_xb_xc_emus()
         self.logger.info('Find corresponding pixels between L8 and MODIS tiles')
-        self.example_file = self.l8_toa_dir + '/%s_b%d.tif'%(l8.header, 1)
+        self.example_file = glob(self.l8_toa_dir + '/%s_[b, B]%d.[t, T][i, I][f, F]'%(l8.header, 1))[0]
         if len(glob(self.l8_toa_dir + '/MCD43_%s.npz'%(l8.header))) == 0:
             boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, self.example_file, \
                                                            self.year, self.doy, [l8.saa_sza, l8.vaa_vza], 
@@ -219,8 +219,8 @@ class solve_aerosol(object):
         self.aot  = np.nanmean(self._extend_vals(self.aot ).reshape(shape1), axis=(3,1))
         self.tcwv = np.nanmean(self._extend_vals(self.tcwv).reshape(shape1), axis=(3,1))
         self.tco3 = np.nanmean(self._extend_vals(self.tco3).reshape(shape1), axis=(3,1))
-        self.saa  = np.nanmean(self._extend_vals(self.saa ).reshape(shape2), axis=(4,2))
-        self.sza  = np.nanmean(self._extend_vals(self.sza ).reshape(shape2), axis=(4,2))
+        self.saa  = np.nanmean(self._extend_vals(self.saa ).reshape(shape1), axis=(3,1))
+        self.sza  = np.nanmean(self._extend_vals(self.sza ).reshape(shape1), axis=(3,1))
         self.vaa  = np.nanmean(self._extend_vals(self.vaa ).reshape(shape2), axis=(4,2))
         self.vza  = np.nanmean(self._extend_vals(self.vza ).reshape(shape2), axis=(4,2))
         self.aot_unc    = np.ones(self.aot.shape)  * 1.
@@ -276,7 +276,7 @@ class solve_aerosol(object):
                               self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
         self.mask = np.nansum(self._extend_vals((~self.dcloud).astype(int)).reshape(shape1), axis=(3,1))
         self.mask = ((self.mask/((1.*self.block_size)**2)) > 0.) & ((tempm/((self.aero_res/500.)**2)) > 0.) & \
-                     (np.any(~np.isnan([self.aot, self.tcwv, self.tco3, self.sza[0]]), axis = 0))
+                     (np.any(~np.isnan([self.aot, self.tcwv, self.tco3, self.sza]), axis = 0))
         self.mask = binary_erosion(self.mask, structure=np.ones((5, 5)).astype(bool))
         self.tcwv[~self.mask] = np.nanmean(self.tcwv)
         self.tco3[~self.mask] = np.nanmean(self.tco3)
@@ -323,9 +323,9 @@ class solve_aerosol(object):
             blue_vza  = np.cos(np.deg2rad(self.vza[0, Hx, Hy]))
             blue_sza  = np.cos(np.deg2rad(self.sza[0, Hx, Hy]))
             red_vza   = np.cos(np.deg2rad(self.vza[2, Hx, Hy])) 
-            red_sza   = np.cos(np.deg2rad(self.sza[2, Hx, Hy]))
+            red_sza   = np.cos(np.deg2rad(self.sza[0, Hx, Hy]))
             blue_raa  = np.cos(np.deg2rad(self.vaa[0, Hx, Hy] - self.saa[0, Hx, Hy]))
-            red_raa   = np.cos(np.deg2rad(self.vaa[2, Hx, Hy] - self.saa[2, Hx, Hy]))
+            red_raa   = np.cos(np.deg2rad(self.vaa[2, Hx, Hy] - self.saa[0, Hx, Hy]))
             red, blue = toa[2, Hx, Hy], toa[0, Hx, Hy]
             swif      = toa[5, Hx, Hy]
             red_emus  = np.array(self.emus)[:, 3]

@@ -317,24 +317,29 @@ def download_sentinel_amazon(start_date, output_dir,
     LOG.info("Scanning archive...")
     acqs_to_dload = 0
     this_dates = []
+    
     while this_date <= end_date:
-
-        the_url = "{0}{1}".format(front_url, "/{0:d}/{1:d}/{2:d}/0/".format(
-            this_date.year, this_date.month, this_date.day))
-        r = requests.get(the_url)
-        more_files = parse_aws_xml (r.text, clouds=clouds)
-        
-        if len(more_files) > 0:
-            acqs_to_dload += 1
-            rqi = requests.get (the_url + "qi/")
-            raux = requests.get (the_url + "aux/")
-            qi = parse_aws_xml (rqi.text)
-            aux = parse_aws_xml (raux.text)
-            more_files.extend (qi)
-            more_files.extend (aux)
-            files_to_download.extend (more_files)
-            LOG.info("Will download data for %s..." % 
-                     this_date.strftime("%Y/%m/%d"))
+        up_url = front_url + '/%d/%d/%d/'%(this_date.year, this_date.month, this_date.day)
+        r = requests.get(up_url)
+        views = [i.split('</Prefix>')[0] for i in r.text.split('<Prefix>') if ('</Prefix>' in i) & (len(i.split('</Prefix>')[0].split('/'))==9)]
+        for view in range(len(views)):
+            the_url = "{0}{1}".format(front_url, "/{0:d}/{1:d}/{2:d}/{3:d}/".format(
+                this_date.year, this_date.month, this_date.day, view))
+            r = requests.get(the_url)
+            
+            more_files = parse_aws_xml (r.text, clouds=clouds)
+            
+            if len(more_files) > 0:
+                acqs_to_dload += 1
+                rqi = requests.get (the_url + "qi/")
+                raux = requests.get (the_url + "aux/")
+                qi = parse_aws_xml (rqi.text)
+                aux = parse_aws_xml (raux.text)
+                more_files.extend (qi)
+                more_files.extend (aux)
+                files_to_download.extend (more_files)
+                LOG.info("Will download data for %s..." % 
+                         this_date.strftime("%Y/%m/%d"))
             this_dates.append(this_date)
         this_date += one_day
     LOG.info("Will download %d acquisitions" % acqs_to_dload)

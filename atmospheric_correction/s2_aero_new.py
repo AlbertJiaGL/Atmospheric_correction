@@ -23,7 +23,7 @@ from reproject import reproject_data
 from scipy.interpolate import griddata
 from grab_brdf import MCD43_SurRef, array_to_raster
 #from grab_uncertainty import grab_uncertainty
-from atmo_solver import solving_atmo_paras
+from atmo_solver_new import solving_atmo_paras
 #from emulation_engine import AtmosphericEmulationEngine
 from psf_optimize import psf_optimize
 import warnings
@@ -50,7 +50,7 @@ class solve_aerosol(object):
                  acquisition = '0',
                  s2_psf      = None,
                  qa_thresh   = 255,
-                 aero_res    = 1220, # resolution for aerosol retrival in meters should be larger than 500
+                 aero_res    = 610, # resolution for aerosol retrival in meters should be larger than 500
                  reconstruct_s2_angle = True):
 
         self.year        = year 
@@ -228,9 +228,9 @@ class solve_aerosol(object):
             costs       = parmap(f, p)
             min_ind     = np.argmin(costs)
             self.s2_logger.info('DDV solved aod is %.03f.'% p[min_ind])
-            #mod08_aot   = self._mod08_aot()
+            mod08_aot   = self._mod08_aot()
             #print(mod08_aot, self.aot.mean(), p[min_ind])
-            self.aot[:] = p[min_ind]#np.nanmean([mod08_aot, self.aot.mean(), p[min_ind]])
+            self.aot[:] = np.nanmean([mod08_aot, self.aot.mean(), p[min_ind]])
 
     def _ddv_cost(self, aot, blue, red, swif, blue_inputs, red_inputs,  blue_emus, red_emus):
         blue_inputs[3, :] = aot
@@ -284,7 +284,8 @@ class solve_aerosol(object):
         self.Hx, self.Hy = hx, hy
         self.s2_logger.info('Update cloud mask.') 
         flist = ['"'.join([f.split('"')[0], self.mcd43_dir+ '/' + f.split('/')[-1]]) for f in flist]
-        self._mcd43_cloud(flist, lx, ly, self.example_file, boa, selected_img['B12'])
+        #self._mcd43_cloud(flist, lx, ly, self.example_file, boa, selected_img['B12'])
+        self.cloud   = self.s2.cloud | (np.repeat(np.repeat(selected_img['B12']/10000., 2, axis=0), 2, axis=1) < 0.0001)
         ker_size        = 2*int(round(max(1.96 * 29.75, 1.96 * 39)))
         border_mask = np.zeros(self.full_res).astype(bool)
         border_mask[[0, -1], :] = True
@@ -319,9 +320,10 @@ class solve_aerosol(object):
         aot, tcwv, tco3 = np.array(self._read_cams(self.example_file)).reshape((3, self.num_blocks, \
                                    self.block_size, self.num_blocks, self.block_size)).mean(axis=(4, 2))
         self.aot        = aot.copy()
-        self._get_ddv_aot(selected_img, tcwv, tco3, ele_data)
         self.tco3       = tco3 * 46.698
         self.tcwv       = tcwv / 10. 
+        self.s2_logger.info('Mean values from ECMWF forcasts are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
+        self._get_ddv_aot(selected_img, tcwv, tco3, ele_data)
         self.aot_unc    = np.ones(self.aot.shape)  * 0.8
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.2
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.2
@@ -332,7 +334,6 @@ class solve_aerosol(object):
             self.s2_logger.warning('Getting tcwv from the emulation of sen2cor look up table failed, ECMWF TCWV is used.')
             #self.tcwv     = tcwv
             #self.tcwv_unc = np.ones(self.tcwv.shape) * 0.2
-        self.s2_logger.info('Mean values for priors are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
         self.s2_logger.info('Applying PSF model.')
         if self.s2_psf is None:
             xstd, ystd, ang, xs, ys = self._get_psf(selected_img)
@@ -489,6 +490,6 @@ class solve_aerosol(object):
         self.aot_map, self.tcwv_map, self.tco3_map = self.solved
 
 if __name__ == "__main__":
-    aero = solve_aerosol( 2017, 7, 28, mcd43_dir = '/store/MCD43/', s2_toa_dir = '/store/S2_data/',\
-                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='40RBN', s2_psf=None)
+    aero = solve_aerosol( 2016, 7, 29, mcd43_dir = '/store/MCD43/', s2_toa_dir = '/store/S2_data/',\
+                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='50SMH', s2_psf=None)
     aero.solving_s2_aerosol()

@@ -189,10 +189,13 @@ def MCD43_SurRef(MCD43_dir, example_file, year, doy, ang_files, sun_view_ang_sca
     elif isinstance(sa_files[0], (np.ndarray, np.generic) ):
         f   = lambda array: reproject_data(array_to_raster(array, example_file), gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float32).data
         sas =  np.array(parmap(f, list(sa_files)))
+        
     if sas.shape[0] == 2:
         sas = np.repeat((sas * sun_view_ang_scale[0])[None, ...], len(bands), axis = 0)
     elif sas.shape[0] == len(bands):
         sas = sas * sun_view_ang_scale[0]
+    elif (sas.shape[0] ==1) & (sas.ndim==4):
+        sas = np.repeat((sas * sun_view_ang_scale[0]), len(bands), axis = 0)
     else:
         raise IOError('Wrong shape of sun angles are given.')
     raa     = vas[:, 0, :, :] - sas[:, 0, :, :]

@@ -29,6 +29,7 @@ class atmospheric_correction(object):
                  month, 
                  day,
                  s2_tile,
+                 acquisition = '0',
                  s2_toa_dir  = '/home/ucfafyi/DATA/S2_MODIS/s_data/',
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
                  emus_dir    = '/home/ucfafyi/DATA/Multiply/emus/',
@@ -40,6 +41,7 @@ class atmospheric_correction(object):
         self.month       = month
         self.day         = day
         self.s2_tile     = s2_tile
+        self.acquisition = acquisition
         self.s2_toa_dir  = s2_toa_dir
         self.global_dem  = global_dem
         self.emus_dir    = emus_dir
@@ -83,7 +85,7 @@ class atmospheric_correction(object):
         self.logger.info('Loading emulators.')
         self._load_xa_xb_xc_emus()
         self.s2   = read_s2(self.s2_toa_dir, self.s2_tile, \
-                            self.year, self.month, self.day, bands=None)
+                            self.year, self.month, self.day, bands=None, acquisition = self.acquisition)
         self.logger.info('Reading in the reflectance.')
         all_refs = self.s2.get_s2_toa()
         self.logger.info('Reading in the angles')
@@ -117,8 +119,8 @@ class atmospheric_correction(object):
         self._save_rgb(self.toa_rgb, 'TOA_RGB.tif', self.s2.s2_file_dir+'/B04.jp2')
         self._save_rgb(self.boa_rgb, 'BOA_RGB.tif', self.s2.s2_file_dir+'/B04.jp2')
         
-        gdal.Translate(self.s2.s2_file_dir+'/TOA_overview.jpg', self.s2.s2_file_dir+'/TOA_RGB.tif', format = 'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic', creationOptions = ['COMPRESS=JPEG', 'PHOTOMETRIC=YCBCR']).FlushCache()
-        gdal.Translate(self.s2.s2_file_dir+'/BOA_overview.jpg', self.s2.s2_file_dir+'/BOA_RGB.tif', format = 'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic', creationOptions = ['COMPRESS=JPEG', 'PHOTOMETRIC=YCBCR']).FlushCache()
+        gdal.Translate(self.s2.s2_file_dir+'/TOA_overview.jpg', self.s2.s2_file_dir+'/TOA_RGB.tif', format = 'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic' ).FlushCache()
+        gdal.Translate(self.s2.s2_file_dir+'/BOA_overview.jpg', self.s2.s2_file_dir+'/BOA_RGB.tif', format = 'JPEG', widthPct=50, heightPct=50, resampleAlg='cubic' ).FlushCache()
 
         del self._10meter_ref; del self._10meter_vza; del self._10meter_vaa; del self._10meter_aod; \
         del self._10meter_tcwv; del self._10meter_tco3; del self._10meter_ele
@@ -198,7 +200,7 @@ class atmospheric_correction(object):
         outputFileName = self.s2.s2_file_dir+'/%s'%name
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('MEM').Create('', ny, nx, 3, gdal.GDT_Byte)
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 3, gdal.GDT_Byte, options=["TILED=YES", "COMPRESS=JPEG"])
         dst_ds.SetGeoTransform(geotransform)
         dst_ds.SetProjection(projection)
         dst_ds.GetRasterBand(1).WriteArray(rgb_array[:,:,0])
@@ -207,7 +209,6 @@ class atmospheric_correction(object):
         dst_ds.GetRasterBand(2).SetScale(self.scale)
         dst_ds.GetRasterBand(3).WriteArray(rgb_array[:,:,2])
         dst_ds.GetRasterBand(3).SetScale(self.scale)
-        gdal.Translate(outputFileName, dst_ds, creationOptions = ['COMPRESS=JPEG', 'TILED=YES']).FlushCache()
         dst_ds.FlushCache()
         dst_ds = None
 
