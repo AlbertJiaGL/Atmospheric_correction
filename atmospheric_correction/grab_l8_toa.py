@@ -46,7 +46,7 @@ class read_l8(object):
         self.mete_file =  glob(self.toa_dir + '/%s_[m, M][t, T][l, L].[t, T][x, X][t, T]'%self.header)[0]
         self.qa_file   =  glob(self.toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%self.header)[0]
         try:
-            self.saa_sza =  glob(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, self.bands[0]))
+            self.saa_sza =  glob(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, 1))
             self.vaa_vza = [glob(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i))[0] for i in self.bands]
         except:
             ang_file     = glob(self.toa_dir + '/%s_[a, A][n, N][g, G].[t, T][x, X][t, T]'%self.header)[0]
@@ -58,18 +58,25 @@ class read_l8(object):
             os.chdir(cwd)
             self.saa_sza = []
             #self.vaa_vza = []
-            for j, i in enumerate(np.arange(1, 8)):
-                if j==0:
-                    gdal.Translate(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, i), \
-                                   self.toa_dir + '/%s_solar_B%02d.img' %(self.header, i), \
-                                   creationOptions = ['COMPRESS=LZW', 'TILED=YES']).FlushCache()
-                    self.saa_sza.append(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, i))
-                gdal.Translate(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i), \
-                               self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i), \
-                               creationOptions = ['COMPRESS=LZW', 'TILED=YES']).FlushCache()
-                [os.remove(f) for f in glob(self.toa_dir + '/%s_sensor_B%02d.img*'%(self.header, i))]
-                [os.remove(f) for f in glob(self.toa_dir + '/%s_solar_B%02d.img*'%(self.header, i))]
+            f      = lambda fnames: gdal.Translate(fnames[0], fnames[1], creationOptions = ['COMPRESS=DEFLATE', 'TILED=YES']).FlushCache()
+            fnames = [(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i), \
+                       self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i)) for i in range(1, 8)]
+            fnames += [(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, 1), 
+                        self.toa_dir + '/%s_solar_B%02d.img' %(self.header, 1)),]        
+            parmap(f, fnames)
+            #for j, i in enumerate(np.arange(1, 8)):
+                #if j==0:
+                    #gdal.Translate(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, i), \
+                    #               self.toa_dir + '/%s_solar_B%02d.img' %(self.header, i), \
+                    #               creationOptions = ['COMPRESS=LZW', 'TILED=YES']).FlushCache()
+                #gdal.Translate(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i), \
+                #               self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i), \
+                #               creationOptions = ['COMPRESS=LZW', 'TILED=YES']).FlushCache()
+             #   [os.remove(f) for f in glob(self.toa_dir + '/%s_sensor_B%02d.img*'%(self.header, i))]
+             #   [os.remove(f) for f in glob(self.toa_dir + '/%s_solar_B%02d.img*'%(self.header, i))]
+            [os.remove(f) for f in glob(self.toa_dir + '/%s_s*_*.img*'%self.header)]
             self.vaa_vza = [self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i) for i in self.bands]
+            self.saa_sza = [self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, 1), ]
         try:
             scale, offset = self._get_scale()
         except:
@@ -135,5 +142,5 @@ class read_l8(object):
         qa_mask = ~((bqa >= 2720) & (bqa <= 2732))
         return qa_mask
 if __name__ == '__main__':
-    l8 = read_l8('/home/ucfafyi/DATA/S2_MODIS/l_data/', (123, 34), 2017, 4, 21, bands=[2,3,4,5,6,7])
+    l8 = read_l8('/home/ucfafyi/DATA/S2_MODIS/l_data/LC08_L1TP_192027_20170526_20170615_01_T1', (192, 27), 2017, 5, 26, bands=[2,3,4,5,6,7])
     #toa = l8._get_toa()

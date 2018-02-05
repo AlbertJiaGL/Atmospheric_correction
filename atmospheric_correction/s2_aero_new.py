@@ -130,7 +130,7 @@ class solve_aerosol(object):
         elevation = ele[self.Hx, self.Hy]
         raa       = abs(saa-vaa)
         inputs    = np.array([b9, b8a, sza, vza, raa, elevation]).T
-        tcwv_mask = ( b8a < 0.1 ) | self.cloud[self.Hx, self.Hy] | (b8a > up[1]) | (b9 > up[0]) | (b9 < bot[0]) | \
+        tcwv_mask = ( b8a < 0.1 ) | self.bad_pix[self.Hx, self.Hy] | (b8a > up[1]) | (b9 > up[0]) | (b9 < bot[0]) | \
                                                                    (sza > up[2]) | (sza < bot[2]) | (vza > up[3]) | \
                                                                    (vza < bot[3]) | (raa > up[4]) | (raa < bot[4]) | \
                                                                    (elevation > up[5]) | (elevation < bot[5])
@@ -147,16 +147,19 @@ class solve_aerosol(object):
                             np.flatnonzero(~tcwv_mask), s2_tcwv[~tcwv_mask]) # simple interpolation
             tcwv    [self.Hx, self.Hy] = s2_tcwv
             tcwv_unc[self.Hx, self.Hy] = s2_tcwv_unc
-            self.tcwv                  = np.nanmean(tcwv    .reshape(self.num_blocks, self.block_size, \
-                                                                     self.num_blocks, self.block_size), axis = (3,1))
-            self.tcwv_unc              = np.nanmax (tcwv_unc.reshape(self.num_blocks, self.block_size, \
-                                                                     self.num_blocks, self.block_size), axis = (3,1)) + 0.05
+            if not np.isnan(tcwv).all():
+                self.tcwv                  = np.nanmean(tcwv    .reshape(self.num_blocks, self.block_size, \
+                                                                         self.num_blocks, self.block_size), axis = (3,1))
+                self.tcwv_unc              = np.nanmax (tcwv_unc.reshape(self.num_blocks, self.block_size, \
+                                                                         self.num_blocks, self.block_size), axis = (3,1)) + 0.05
+            else:
+                self.s2_logger.warning('Failed to get TCWV from sen2cor look up table and ECMWF tcwv is used.')
     def _get_psf(self, selected_img):
         self.s2_logger.info('No PSF parameters specified, start solving.')
         high_img    = np.repeat(np.repeat(selected_img['B11'], 2, axis=0), 2, axis=1)*0.0001
         high_indexs = self.Hx, self.Hy
         low_img     = np.ma.array(self.s2_boa[4])
-        qa, cloud   = self.s2_boa_qa[4], self.cloud
+        qa, cloud   = self.s2_boa_qa[4], self.bad_pix
         xstd, ystd  = 29.75, 39
         psf         = psf_optimize(high_img, high_indexs, low_img, qa, cloud, 0.1, xstd = xstd, ystd = ystd)
         xs, ys      = psf.fire_shift_optimize()
@@ -195,7 +198,7 @@ class solve_aerosol(object):
     def _get_ddv_aot(self, selected_img, tcwv, tco3, ele_data):
         b2, b4,   = selected_img['B02']/10000., selected_img['B04']/10000.
         b8, b12   = selected_img['B08']/10000., np.repeat(np.repeat(selected_img['B12']/10000., 2, axis=0), 2, axis=1)
-        ndvi_mask = (((b8 - b4)/(b8 + b4)) > 0.4) & (b12 > 0.01) & (b12 < 0.25) & (~self.dcloud)
+        ndvi_mask = (((b8 - b4)/(b8 + b4)) > 0.4) & (b12 > 0.01) & (b12 < 0.25) & (~self.bad_pix)
         if ndvi_mask.sum() < 1000:
             self.s2_logger.info('No enough DDV found in this sence for aot restieval, and ECWMF AOT is used.')
         else:
@@ -253,6 +256,17 @@ class solve_aerosol(object):
         cost     = 0.5 * (blue_dif + red_dif + rb_dif)
         return cost.sum()
 
+    def mask_bad_pix(self, selected_img):
+        ndvi         = (selected_img['B08']-selected_img['B04'])/(1. * selected_img['B04'] + selected_img['B08'])
+        water_mask   = ((ndvi < 0.01) & (selected_img['B08'] < 1100)) | ((ndvi < 0.1) & (selected_img['B08'] < 500)) | \
+                        np.repeat(np.repeat((selected_img['B12'] < 1), 2, axis=0), 2, axis=1)
+        ker_size    = 2*int(round(max(1.96 * 29.75, 1.96 * 39)))
+        ewater_mask   = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool) 
+        border_mask = np.zeros(self.full_res).astype(bool)
+        border_mask[[0, -1], :] = True
+        border_mask[:, [0, -1]] = True
+        self.bad_pix = binary_dilation(self.s2.cloud | border_mask | ewater_mask, \
+                       structure=np.ones((3,3)).astype(bool), iterations=int(ker_size/2)).astype(bool)
 
     def _s2_aerosol(self,):
         
@@ -283,18 +297,15 @@ class solve_aerosol(object):
             boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist']
         self.Hx, self.Hy = hx, hy
         self.s2_logger.info('Update cloud mask.') 
-        flist = ['"'.join([f.split('"')[0], self.mcd43_dir+ '/' + f.split('/')[-1]]) for f in flist]
+        self.mask_bad_pix(selected_img)
+        #flist = ['"'.join([f.split('"')[0], self.mcd43_dir+ '/' + f.split('/')[-1]]) for f in flist]
         #self._mcd43_cloud(flist, lx, ly, self.example_file, boa, selected_img['B12'])
-        self.cloud   = self.s2.cloud | (np.repeat(np.repeat(selected_img['B12']/10000., 2, axis=0), 2, axis=1) < 0.0001)
-        ker_size        = 2*int(round(max(1.96 * 29.75, 1.96 * 39)))
-        border_mask = np.zeros(self.full_res).astype(bool)
-        border_mask[[0, -1], :] = True
-        border_mask[:, [0, -1]] = True
-        self.dcloud   = binary_dilation(self.cloud | border_mask, structure=np.ones((3,3)).astype(bool), iterations=int(ker_size/2)).astype(bool)
+        #self.cloud  = self.s2.cloud | (np.repeat(np.repeat(selected_img['B12']/10000., 2, axis=0), 2, axis=1) < 0.0001)
+                                                
         self.s2_logger.info('Applying spectral transform.')
         self.s2_boa_qa = np.ma.array(unc)
         self.s2_boa = np.ma.array(boa)*np.array(self.s2_spectral_transform)[0,:-1][...,None] + \
-                                      np.array(self.s2_spectral_transform)[1,:-1][...,None]
+                                       np.array(self.s2_spectral_transform)[1,:-1][...,None]
         shape = (self.num_blocks, int(self.s2.angles['sza'].shape[0] / self.num_blocks), \
                  self.num_blocks, int(self.s2.angles['sza'].shape[1] / self.num_blocks))
         self.sza = self.s2.angles['sza'].reshape(shape).mean(axis = (3, 1))
@@ -323,12 +334,13 @@ class solve_aerosol(object):
         self.tco3       = tco3 * 46.698
         self.tcwv       = tcwv / 10. 
         self.s2_logger.info('Mean values from ECMWF forcasts are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
-        self._get_ddv_aot(selected_img, tcwv, tco3, ele_data)
+        #self._get_ddv_aot(selected_img, tcwv, tco3, ele_data)
         self.aot_unc    = np.ones(self.aot.shape)  * 0.8
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.2
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.2
         self.s2_logger.info('Trying to get the tcwv from the emulation of sen2cor look up table.')
         try:
+            jj
             self._get_tcwv(selected_img, self.s2.angles['vza'], self.s2.angles['vaa'], self.s2.angles['sza'], self.s2.angles['saa'], ele_data)
         except:
             self.s2_logger.warning('Getting tcwv from the emulation of sen2cor look up table failed, ECMWF TCWV is used.')
@@ -359,7 +371,7 @@ class solve_aerosol(object):
                 imgs.append( self.repeat_extend(selected_img[band], shape = self.full_res))
             else:
                 imgs.append(selected_img[band])
-        self.bad_pixs = self.dcloud[self.Hx, self.Hy]
+        self.bad_pixs = self.bad_pix[self.Hx, self.Hy]
         del selected_img; del self.s2.selected_img; del self.s2.angles['vza']; del self.s2.angles['vaa']
         del self.s2.angles['sza']; del self.s2.angles['saa']; del self.s2.sza; del self.s2.saa; del self.s2
         ker = self.gaussian(xstd, ystd, ang) 
@@ -386,10 +398,10 @@ class solve_aerosol(object):
         tempm[self.Hx, self.Hy] = 1
         tempm = tempm.reshape(self.num_blocks, self.block_size, \
                               self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        mask = ~self.dcloud
+        mask = ~self.bad_pix
         self.mask = mask.reshape(self.num_blocks, self.block_size, \
                                  self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        self.mask = ((self.mask/((1.*self.block_size)**2)) >= 0.) & ((tempm/((self.aero_res/500.)**2)) >= 0.)
+        self.mask = ((self.mask/((1.*self.block_size)**2)) > 0.) & ((tempm/((self.aero_res/500.)**2)) > 0.)
         self.mask = binary_erosion(self.mask, structure=np.ones((3,3)).astype(bool))
         if self.mask.sum() ==0:
             self.s2_logger.info('No valid value is found for retrieval of atmospheric parameters and priors are stored.')
@@ -481,7 +493,7 @@ class solve_aerosol(object):
             outputFileName = self.s2_file_dir + '/%s.tif'%para_names[i]
             if os.path.exists(outputFileName):
                 os.remove(outputFileName)
-            dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32)
+            dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32, options=["TILED=YES", "COMPRESS=DEFLATE"])
             dst_ds.SetGeoTransform(geotransform)   
             dst_ds.SetProjection(projection) 
             dst_ds.GetRasterBand(1).WriteArray(self.solved[i])
@@ -490,6 +502,6 @@ class solve_aerosol(object):
         self.aot_map, self.tcwv_map, self.tco3_map = self.solved
 
 if __name__ == "__main__":
-    aero = solve_aerosol( 2016, 7, 29, mcd43_dir = '/store/MCD43/', s2_toa_dir = '/store/S2_data/',\
-                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='50SMH', s2_psf=None)
+    aero = solve_aerosol( 2016, 7, 29, mcd43_dir = '/data/nemesis/MCD43/', s2_toa_dir = '/data/nemesis/S2_data/',\
+                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='50SLH', s2_psf=None)
     aero.solving_s2_aerosol()

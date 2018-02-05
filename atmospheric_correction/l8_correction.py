@@ -92,8 +92,10 @@ class atmospheric_correction(object):
         
         self.boa[:, gdal.Open(glob(self.l8_toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%l8.header)[0]).ReadAsArray() == 1] = np.nan
         self.toa[:, gdal.Open(glob(self.l8_toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%l8.header)[0]).ReadAsArray() == 1] = np.nan
-        self.boa_rgb = np.clip(self.boa[[3,2,1]].transpose(1,2,0) * 255 / 0.255, 0, 255).astype(uint8)
-        self.toa_rgb = np.clip(self.toa[[3,2,1]].data.transpose(1,2,0) * 255 / 0.255, 0, 255).astype(uint8)
+
+        self.scale   = np.percentile(self.boa[[3,2,1]][self.boa[[3,2,1]] > 0], 95)
+        self.boa_rgb = np.clip      (self.boa[[3,2,1]].transpose(1,2,0) * 255 / self.scale, 0, 255).astype(uint8)
+        self.toa_rgb = np.clip      (self.toa[[3,2,1]].data.transpose(1,2,0) * 255 / self.scale, 0, 255).astype(uint8)
         self.logger.info('Saving corrected results')
         self._save_rgb(self.toa_rgb, 'TOA_RGB', self.example_file)
         self._save_rgb(self.boa_rgb, 'BOA_RGB', self.example_file)
@@ -152,8 +154,11 @@ class atmospheric_correction(object):
         dst_ds.SetGeoTransform(geotransform)
         dst_ds.SetProjection(projection)
         dst_ds.GetRasterBand(1).WriteArray(rgb_array[:,:,0])
+        dst_ds.GetRasterBand(1).SetScale(self.scale)
         dst_ds.GetRasterBand(2).WriteArray(rgb_array[:,:,1])
+        dst_ds.GetRasterBand(2).SetScale(self.scale)
         dst_ds.GetRasterBand(3).WriteArray(rgb_array[:,:,2])
+        dst_ds.GetRasterBand(3).SetScale(self.scale)
         dst_ds.FlushCache()
         dst_ds = None
 
@@ -171,7 +176,7 @@ class atmospheric_correction(object):
         outputFileName = self.l8_toa_dir + '/%s_b%s_sur.tif'%(self.l8_header, band)
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Int16)
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Int16, options=["TILED=YES", "COMPRESS=DEFLATE"])
         dst_ds.SetGeoTransform(geotransform)    
         dst_ds.SetProjection(projection) 
         sur = ref * 10000

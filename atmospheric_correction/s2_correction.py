@@ -113,7 +113,7 @@ class atmospheric_correction(object):
                              self._10meter_band_indexs)     
         
         mask         = (self._10meter_ref[[2,1,0], ...] >= 0)
-        self.scale   = np.percentile(self._10meter_ref[[2,1,0], ...][self._10meter_ref[[2,1,0], ...]>0], 95) #self._10meter_ref[[2,1,0], ...][mask].mean() + 3 * self._10meter_ref[[2,1,0], ...][mask].std()
+        self.scale   = 0.25 #np.percentile(self._10meter_ref[[2,1,0], ...][self._10meter_ref[[2,1,0], ...]>0], 95) #self._10meter_ref[[2,1,0], ...][mask].mean() + 3 * self._10meter_ref[[2,1,0], ...][mask].std()
         self.toa_rgb = clip(self._10meter_ref[[2,1,0], ...].transpose(1,2,0)*255/self.scale, 0., 255.).astype(uint8)
         self.boa_rgb = clip(self.boa         [[2,1,0], ...].transpose(1,2,0)*255/self.scale, 0., 255.).astype(uint8)
         self._save_rgb(self.toa_rgb, 'TOA_RGB.tif', self.s2.s2_file_dir+'/B04.jp2')
@@ -239,7 +239,7 @@ class atmospheric_correction(object):
         outputFileName = self.s2.s2_file_dir+'/%s_sur.tif'%band
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Int16)
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Int16, options=["TILED=YES", "COMPRESS=DEFLATE"])
         dst_ds.SetGeoTransform(geotransform)
         dst_ds.SetProjection(projection)
         sur = ref * 10000

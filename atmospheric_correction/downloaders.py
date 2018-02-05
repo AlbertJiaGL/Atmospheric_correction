@@ -20,7 +20,7 @@ def down_s2(tile, s2_dir, year, month, day):
                              s2_dir, tile = tile, clouds=100,\
                              end_date=datetime(year, month, day) )
 
-def down_l8(header, l8_dir):
+def down_l8_aws(header, l8_dir):
     temp = 'https://landsat-pds.s3.amazonaws.com/c1/L8/%s/%s/%s/'
     path, row = header.split('_')[2][:3], header.split('_')[2][3:]
     root = temp%(path, row, header)
@@ -34,14 +34,33 @@ def down_l8(header, l8_dir):
     for i in fnames:
         os.rename(l8_dir + '/' + i, ndir + '/' + i)
 
+#https://storage.googleapis.com/gcp-public-data-landsat/LC08/01/015/035/LC08_L1TP_015035_20160124_20170224_01_T1/LC08_L1TP_015035_20160124_20170224_01_T1_B1.TIF
+def down_l8_google(header, l8_dir):
+    temp = 'https://storage.googleapis.com/gcp-public-data-landsat/LC08/01/%s/%s/%s/'
+    path, row = header.split('_')[2][:3], header.split('_')[2][3:]
+    root = temp%(path, row, header)
+    footer = ['B%d.TIF'%(band+1) for band in range(11)] + ['BQA.TIF', 'MTL.txt', 'ANG.txt']
+    fnames = [header + '_' + foot for foot in footer]
+    par = partial(downloader, url_root = root, file_dir = l8_dir)
+    parmap(par, fnames)
+    ndir = l8_dir + '/' + header
+    if not os.path.exists(ndir):
+        os.mkdir(ndir)
+    for i in fnames:
+        os.rename(l8_dir + '/' + i, ndir + '/' + i)
+
+
 def downloader(fname, url_root, file_dir):
     new_url = url_root + fname
     new_req = requests.get(new_url, stream=True)
-    print('downloading %s' % fname)
-    with open(os.path.join(file_dir, fname), 'wb') as fp:
-        for chunk in new_req.iter_content(chunk_size=1024):
-            if chunk:
-                fp.write(chunk)
+    if new_req.ok:
+        print('downloading %s' % fname)
+        with open(os.path.join(file_dir, fname), 'wb') as fp:
+            for chunk in new_req.iter_content(chunk_size=1024):
+                if chunk:
+                    fp.write(chunk)
+    else:
+        print('Requests failed.')
 
 def down_s2_emus(emus_dir, satellite):
     url = 'http://www2.geog.ucl.ac.uk/~ucfafyi/emus/'

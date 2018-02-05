@@ -21,7 +21,7 @@ args = parser.parse_args()
 l8_toa_dir       = '/'.join(args.l8_file.split('/')[:-1])
 header           = '_'.join(args.l8_file.split('/')[-1].split('_')[:7])
 if len(glob(l8_toa_dir + '/' + header + '_[b, B]*.[T, t][I, i][F, f]')) < 12:
-    down_l8(header, l8_toa_dir)
+    down_l8_google(header, l8_toa_dir)
     #args.l8_file = glob(l8_toa_dir + '/' + header + '/' + header + '_[b, B]1.[t, T][i, I][f, F]')[0]
     l8_toa_dir   =      l8_toa_dir + '/' + header + '/'
 args.l8_file     = glob(l8_toa_dir + '/' + header + '_[b, B]1.[t, T][i, I][f, F]')[0]

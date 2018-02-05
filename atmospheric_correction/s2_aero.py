@@ -147,10 +147,13 @@ class solve_aerosol(object):
                             np.flatnonzero(~tcwv_mask), s2_tcwv[~tcwv_mask]) # simple interpolation
             tcwv    [self.Hx, self.Hy] = s2_tcwv
             tcwv_unc[self.Hx, self.Hy] = s2_tcwv_unc
-            self.tcwv                  = np.nanmean(tcwv    .reshape(self.num_blocks, self.block_size, \
-                                                                     self.num_blocks, self.block_size), axis = (3,1))
-            self.tcwv_unc              = np.nanmax (tcwv_unc.reshape(self.num_blocks, self.block_size, \
-                                                                     self.num_blocks, self.block_size), axis = (3,1)) + 0.05
+            if not np.isnan(tcwv).all():
+                self.tcwv                  = np.nanmean(tcwv    .reshape(self.num_blocks, self.block_size, \
+                                                                         self.num_blocks, self.block_size), axis = (3,1))
+                self.tcwv_unc              = np.nanmax (tcwv_unc.reshape(self.num_blocks, self.block_size, \
+                                                                         self.num_blocks, self.block_size), axis = (3,1)) + 0.05
+            else:
+                self.s2_logger.warning('Failed to get TCWV from sen2cor look up table and ECMWF tcwv is used.')
     def _get_psf(self, selected_img):
         self.s2_logger.info('No PSF parameters specified, start solving.')
         high_img    = np.repeat(np.repeat(selected_img['B11'], 2, axis=0), 2, axis=1)*0.0001
@@ -388,7 +391,7 @@ class solve_aerosol(object):
         mask = ~self.dcloud
         self.mask = mask.reshape(self.num_blocks, self.block_size, \
                                  self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        self.mask = ((self.mask/((1.*self.block_size)**2)) >= 0.) & ((tempm/((self.aero_res/500.)**2)) >= 0.)
+        self.mask = ((self.mask/((1.*self.block_size)**2)) > 0.) & ((tempm/((self.aero_res/500.)**2)) > 0.)
         self.mask = binary_erosion(self.mask, structure=np.ones((3,3)).astype(bool))
         if self.mask.sum() ==0:
             self.s2_logger.info('No valid value is found for retrieval of atmospheric parameters and priors are stored.')
@@ -480,7 +483,7 @@ class solve_aerosol(object):
             outputFileName = self.s2_file_dir + '/%s.tif'%para_names[i]
             if os.path.exists(outputFileName):
                 os.remove(outputFileName)
-            dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32)
+            dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32, options=["TILED=YES", "COMPRESS=DEFLATE"])
             dst_ds.SetGeoTransform(geotransform)   
             dst_ds.SetProjection(projection) 
             dst_ds.GetRasterBand(1).WriteArray(self.solved[i])
