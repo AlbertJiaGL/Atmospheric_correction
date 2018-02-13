@@ -15,6 +15,17 @@ def gdal_reader(fname):
         raise IOError
     else:
         return g.ReadAsArray()
+ 
+def update_vaa(fname):
+    # view azimuth angle is not usable for Landsat 8
+    # and mean values are used
+    ds   = gdal.Open(fname, gdal.GA_Update)
+    data = ds.GetRasterBand(1).ReadAsArray()
+    data = np.ma.array(data, mask = ((data > 18000) | (data < -18000)))
+    data[data<0]     = data[data<0] + 18000
+    data[~data.mask] = int(np.nanmean(data[~data.mask]))
+    ds.GetRasterBand(1).WriteArray(data)
+    ds = None
 
 class read_l8(object):
     '''
@@ -58,11 +69,13 @@ class read_l8(object):
             os.chdir(cwd)
             self.saa_sza = []
             #self.vaa_vza = []
-            f      = lambda fnames: gdal.Translate(fnames[0], fnames[1], creationOptions = ['COMPRESS=DEFLATE', 'TILED=YES']).FlushCache()
-            fnames = [(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i), \
-                       self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i)) for i in range(1, 8)]
+            f       = lambda fnames: gdal.Translate(fnames[0], fnames[1], creationOptions = ['COMPRESS=DEFLATE', 'TILED=YES']).FlushCache()
+            fnames  = [(self.toa_dir + '/%s_sensor_B%02d.tif'%(self.header, i), \
+                        self.toa_dir + '/%s_sensor_B%02d.img'%(self.header, i)) for i in range(1, 8)]
             fnames += [(self.toa_dir + '/%s_solar_B%02d.tif' %(self.header, 1), 
                         self.toa_dir + '/%s_solar_B%02d.img' %(self.header, 1)),]        
+            sas     = [self.toa_dir  + '/%s_sensor_B%02d.img'%(self.header, i) for i in range(1, 8)]
+            parmap(update_vaa, sas)
             parmap(f, fnames)
             #for j, i in enumerate(np.arange(1, 8)):
                 #if j==0:

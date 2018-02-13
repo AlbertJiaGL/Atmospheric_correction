@@ -2,6 +2,7 @@
 import gdal
 import os
 import sys
+import copy
 sys.path.insert(0, 'util')
 sys.path.insert(0, './')
 import xml.etree.ElementTree as ET
@@ -9,11 +10,12 @@ import numpy as np
 from multiprocessing import Pool
 from glob import glob
 from scipy.interpolate import griddata
+from scipy.signal import fftconvolve
 #import subprocess
 from s2a_angle_bands_mod import s2a_angle
 from reproject import reproject_data
 from multi_process import parmap
-import copy
+from skimage.morphology import disk, dilation
 
 def read_s2_band(fname):
         g = gdal.Open(fname)
@@ -77,6 +79,23 @@ class read_s2(object):
         return self.selected_img
 
     def get_s2_cloud(self,):
+
+        needed_bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
+        cloud_bands  = ['B01', 'B02', 'B04', 'B05', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
+        ratio        = [ 6,     1,     1,     2,     1,     2,     6,     6,     2,     2]
+        fname        = [self.s2_file_dir+'/%s.jp2'%i for i in needed_bands]
+        pool         = Pool(processes=len(fname))
+        ret          = pool.map(read_s2_band, fname)
+        imgs         = dict(zip(self.bands, ret))
+        refs         = np.array([np.repeat(np.repeat(imgs[band]/10000., ratio[i], axis=0), ratio[i], axis=1) for i, band in enumerate(cloud_bands)]).reshape(10,-1)
+        #refs         = refs.reshape(10, 10980//2, 2, 10980//2, 2,).mean(axis=(4,2).reshape(10,-1)
+        classifier   = pkl.load(open('./data/sen2cloud_detector.pkl', 'rb'))
+        cloud_probs  = classifier.predict(refs.T)[:,1]
+        cloud_mask   = cloud_probs > 0.4
+        fftconvolve(cloud_prob, disk(4)/np.sum(disk(4)), mode='same')
+
+        return cloud_mask
+        
         if glob(self.s2_file_dir+'/cloud.tif')==[]:
             print('Rasterizing cloud mask')
             g     = gdal.Open(self.s2_file_dir+'/B04.jp2')

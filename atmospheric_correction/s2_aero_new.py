@@ -331,6 +331,7 @@ class solve_aerosol(object):
         aot, tcwv, tco3 = np.array(self._read_cams(self.example_file)).reshape((3, self.num_blocks, \
                                    self.block_size, self.num_blocks, self.block_size)).mean(axis=(4, 2))
         self.aot        = aot.copy()
+        self.aot[:]     = np.nanmean(aot)
         self.tco3       = tco3 * 46.698
         self.tcwv       = tcwv / 10. 
         self.s2_logger.info('Mean values from ECMWF forcasts are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))

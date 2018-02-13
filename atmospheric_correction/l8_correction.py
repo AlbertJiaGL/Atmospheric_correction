@@ -93,7 +93,7 @@ class atmospheric_correction(object):
         self.boa[:, gdal.Open(glob(self.l8_toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%l8.header)[0]).ReadAsArray() == 1] = np.nan
         self.toa[:, gdal.Open(glob(self.l8_toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%l8.header)[0]).ReadAsArray() == 1] = np.nan
 
-        self.scale   = np.percentile(self.boa[[3,2,1]][self.boa[[3,2,1]] > 0], 95)
+        self.scale   = np.percentile(self.boa[3][self.boa[3] > 0], 95)
         self.boa_rgb = np.clip      (self.boa[[3,2,1]].transpose(1,2,0) * 255 / self.scale, 0, 255).astype(uint8)
         self.toa_rgb = np.clip      (self.toa[[3,2,1]].data.transpose(1,2,0) * 255 / self.scale, 0, 255).astype(uint8)
         self.logger.info('Saving corrected results')
