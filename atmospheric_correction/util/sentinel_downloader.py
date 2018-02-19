@@ -301,12 +301,12 @@ def download_sentinel_amazon(start_date, output_dir,
         mgrs_reference = get_mgrs(longitude, latitude)
     else:
         mgrs_reference = tile
-    if verbose:
-        print "We need MGRS reference %s" % mgrs_reference
+    #if verbose:
+    #    print("We need MGRS reference %s" % mgrs_reference)
     utm_code = mgrs_reference[:2]
     lat_band = mgrs_reference[2]
     square = mgrs_reference[3:]
-    LOG.info("Location coordinates: %s" % mgrs_reference )
+    #LOG.info("Location coordinates: %s" % mgrs_reference )
 
     front_url = aws_url + "%s/%s/%s" % (utm_code, lat_band, square)
     this_date = start_date
@@ -314,7 +314,7 @@ def download_sentinel_amazon(start_date, output_dir,
     files_to_download = []
     if end_date is None:
         end_date = datetime.datetime.today()
-    LOG.info("Scanning archive...")
+    #LOG.info("Scanning archive...")
     acqs_to_dload = 0
     this_dates = []
     
@@ -338,11 +338,11 @@ def download_sentinel_amazon(start_date, output_dir,
                 more_files.extend (qi)
                 more_files.extend (aux)
                 files_to_download.extend (more_files)
-                LOG.info("Will download data for %s..." % 
-                         this_date.strftime("%Y/%m/%d"))
+                #LOG.info("Will download data for %s..." % 
+                #         this_date.strftime("%Y/%m/%d"))
             this_dates.append(this_date)
         this_date += one_day
-    LOG.info("Will download %d acquisitions" % acqs_to_dload)
+    #LOG.info("Will download %d acquisitions" % acqs_to_dload)
     the_urls = []
     if just_previews:
         the_files = []
@@ -357,11 +357,11 @@ def download_sentinel_amazon(start_date, output_dir,
                                                     fich.split("tiles/")[-1]))
         if not os.path.exists ( ootput_dir ):
             
-            LOG.info("Creating output directory (%s)" % ootput_dir)
+            #LOG.info("Creating output directory (%s)" % ootput_dir)
             os.makedirs ( ootput_dir )
     ok_files = []
-    LOG.info( "Downloading a grand total of %d files" % 
-            len ( files_to_download ))
+    #LOG.info( "Downloading a grand total of %d files" % 
+    #        len ( files_to_download ))
     download_granule_patch = partial(aws_grabber, output_dir=output_dir)
     with futures.ThreadPoolExecutor(max_workers=n_threads) as executor:
         for fich in executor.map(download_granule_patch, the_urls):

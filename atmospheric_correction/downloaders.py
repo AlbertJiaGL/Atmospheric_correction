@@ -134,5 +134,5 @@ def helper(fl, modis_dir):
     if len(glob(f_temp%(day, tile))) == 0:
         year, doy = int(day[:4]), int(day[4:])
         get_modisfiles( 'MOTA', 'MCD43A1.006', year, tile, None,
-                         doy_start= doy, doy_end = doy + 1, out_dir = modis_dir, verbose=1)
+                         doy_start= doy, doy_end = doy + 1, out_dir = modis_dir, verbose=0)
 

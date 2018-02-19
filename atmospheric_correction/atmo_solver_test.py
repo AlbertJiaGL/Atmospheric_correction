@@ -36,7 +36,7 @@ class solving_atmo_paras(object):
                  band_wavelength,
                  pix_res = 10.,
                  gamma   = 0.5,
-                 alpha   = -1.4,# from nasa modis climatology
+                 alpha   = -1.6,# from nasa modis climatology
                  subsample = 1,
                  subsample_start = 0
                  ):
@@ -164,8 +164,8 @@ class solving_atmo_paras(object):
         full_J   = np.nansum(0.5 * self.band_weights[...,None] * (diff)**2 / self.boa_unc**2, axis=0)
         J        = np.zeros(self.full_res)
         J[self.Hx, self.Hy] = full_J
-        J = np.nansum(J.reshape(self.num_blocks_x, self.block_size, \
-                                self.num_blocks_y, self.block_size).sum(axis=(3,1))*self.mask)
+        J        = np.nansum(J.reshape(self.num_blocks_x, self.block_size, \
+                                       self.num_blocks_y, self.block_size).sum(axis=(3,1))*self.mask)
         dH       = -1 * (-self.toa[...,None] * xap_dH - \
                          2 * self.toa[...,None] * xap_H[...,None] * xbp_H[...,None] * xcp_dH + \
                          self.toa[...,None]**2 * xap_H[...,None]**2 * xcp_dH + \
@@ -173,8 +173,8 @@ class solving_atmo_paras(object):
                          xbp_H[...,None]**2 * xcp_dH) / \
                          (self.toa[...,None] * xap_H[...,None] * xcp_H[...,None] - \
                           xbp_H[...,None] * xcp_H[...,None] + 1)**2 
-        full_dJ  = [ self.band_weights[...,None] * dH[:,:,i] * diff / (self.boa_unc**2) for i in range(3)]
-
+        full_dJ  = [ self.band_weights[...,None] * dH[:,:,i] * diff / (self.boa_unc ** 2) for i in range(3)]
+        
         if is_full:
             dJ = np.nansum(np.array(full_dJ), axis=(1,))
             J_ = np.zeros((3,) + self.full_res)
@@ -184,13 +184,14 @@ class solving_atmo_paras(object):
             J_[:, ~self.mask] = 0
             J_ = J_.reshape(3, -1)
             if do_unc:
-                comb_unc        = np.nansum([self.band_weights[...,None] * (full_dJ[i] ** 2) * (self.boa_unc ** -1)  for i in range(3)], axis = 1)
-                self.obs_unc    = np.zeros((3,) + self.full_res)
-                self.obs_unc[:] = np.nan
+                comb_unc              = np.nansum([self.band_weights[...,None] * (dH[:, :, i] ** 2) * (self.boa_unc ** -2)  for i in range(3)], axis = 1)
+                comb_unc[comb_unc==0] = np.nan
+                self.obs_unc          = np.zeros((3,) + self.full_res)
+                self.obs_unc[:]       = np.nan
                 self.obs_unc[:, self.Hx, self.Hy] = comb_unc
-                self.obs_unc    = np.nanmin(self.obs_unc.reshape(3, self.num_blocks_x, self.block_size, \
-                                                                    self.num_blocks_y, self.block_size), axis=(4,2))
-                self.obs_unc[~self.mask] = np.nan
+                self.obs_unc          = np.nanmax(self.obs_unc.reshape(3, self.num_blocks_x, self.block_size, \
+                                                                          self.num_blocks_y, self.block_size), axis=(4,2))
+                self.obs_unc[:,~self.mask] = np.nan
                 return self.obs_unc
         else:
             J_ = np.nansum(np.array(full_dJ), axis=(1, 2))
@@ -231,7 +232,7 @@ class solving_atmo_paras(object):
         der_j_model = np.zeros_like(x)
         for i in [1,3,4,6]:
             dif        = hood[i,:,:] - x[1:-1,1:-1] 
-            dif[~mask[1:-1,1:-1]] = 0
+            #dif[~mask[1:-1,1:-1]] = 0
             j_model = j_model + 0.5 * np.sum(dif **2)/sigma_model**2
             der_j_model[1:-1,1:-1] = der_j_model[1:-1,1:-1] - dif/sigma_model**2
         
@@ -281,7 +282,7 @@ class solving_atmo_paras(object):
         psolve = optimize.fmin_l_bfgs_b(self._cost, p0, approx_grad = 0, iprint = 1, m=20,\
                                         maxiter=500, pgtol = 1e-3,factr=1e6, bounds = bounds,fprime=None)
         self._obs_cost_test(psolve[0], do_unc = True)
-        unc = (np.nansum([1. / self.obs_unc.reshape(3, -1), 1. / self.prior_uncs + self.gamma], axis = 0)) ** -1
+        unc = (np.nansum([self.obs_unc.reshape(3, -1), 1. / self.prior_uncs**2 + self.gamma**2], axis = 0)) ** -0.5
         return [psolve[0], unc]
 
 if __name__ == '__main__':

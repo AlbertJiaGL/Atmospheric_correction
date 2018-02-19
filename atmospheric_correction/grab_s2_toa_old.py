@@ -37,71 +37,131 @@ class read_s2(object):
                  s2_tile, 
                  year, month, day,
                  acquisition = '0',
-                 bands   = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12', 'B8A']):
-        self.s2_toa_dir  = s2_toa_dir
-        self.s2_tile     = s2_tile
-        self.year        = year
-        self.month       = month
-        self.day         = day
-        self.bands       = bands # selected bands
-        self.s2_bands    = 'B01', 'B02', 'B03','B04','B05' ,'B06', 'B07', \
-                           'B08','B8A', 'B09', 'B10', 'B11', 'B12' #all bands
+                 bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12', 'B8A']):
+        self.s2_toa_dir = s2_toa_dir
+        self.s2_tile    = s2_tile
+        self.year       = year
+        self.month      = month
+        self.day        = day
+        self.bands      = bands # selected bands
+        self.s2_bands   = 'B01', 'B02', 'B03','B04','B05' ,'B06', 'B07', \
+                          'B08','B8A', 'B09', 'B10', 'B11', 'B12' #all bands
         self.s2_file_dir = os.path.join(self.s2_toa_dir, self.s2_tile[:-3],\
                                         self.s2_tile[-3], self.s2_tile[-2:],\
                                         str(self.year), str(self.month), str(self.day), acquisition)
         self.selected_img = None
-        self.done         = False
-
-    def _read_all(self, done = False):
-        fname     = [self.s2_file_dir+'/%s.jp2'%i for i in self.s2_bands]
-        pool      = Pool(processes=len(fname))
-        ret       = pool.map(read_s2_band, fname)    
-        self.imgs = dict(zip(self.s2_bands, ret))
-        self.done = True
-
+        
     def get_s2_toa(self,vrt = False):
-        self._read_all(self.done)
-        if self.bands is None:
-            self.bands = self.s2_bands
-        selc_imgs = [self.imgs[band] for band in self.bands] 
-        return dict(zip(self.bands, selc_imgs))
+        if vrt:
+        # open the created vrt file with 10 meter, 20 meter and 60 meter 
+        # grouped togehter and use gdal memory map to open it
+            g = gdal.Open(self.s2_file_dir+'/10meter.vrt')
+            data= g.GetVirtualMemArray()
+            b2,b3,b4,b8 = data
+            g1 = gdal.Open(self.s2_file_dir+'/20meter.vrt')
+            data1 = g1.GetVirtualMemArray()
+            b5, b6, b7, b8a, b11, b12 = data1
+            g2 = gdal.Open(self.s2_file_dir+'/60meter.vrt')
+            data2 = g2.GetVirtualMemArray()
+            b1, b9, b10 = data2
+            img = dict(zip(self.s2_bands, [b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b8a]))
+            if self.bands is not None:
+                imgs = {k: img[k] for k in self.bands}
+            else:
+                imgs = img
+        else:
+             if self.bands is None:
+                 self.bands = self.s2_bands
+             fname = [self.s2_file_dir+'/%s.jp2'%i for i in self.bands]
+             pool = Pool(processes=len(fname))
+             ret = pool.map(read_s2_band, fname)
+             imgs = dict(zip(self.bands, ret))
+        self.selected_img = copy.deepcopy(imgs)
+        return self.selected_img
 
     def get_s2_cloud(self,):
-        self._read_all(self.done)  
-        if len(glob(self.s2_file_dir+'/cloud.tif'))==0:
-            cloud_bands  = ['B01', 'B02', 'B04', 'B05', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
-            ratio        = [ 6,     1,     1,     2,     1,     2,     6,     6,     2,     2]
-            refs         = np.array([np.repeat(np.repeat(self.imgs[band]/10000., ratio[i], axis=0), ratio[i], axis=1) \
-                                                               for i, band in enumerate(cloud_bands)]).reshape(10,-1)
-            classifier   = pkl.load(open('./data/sen2cloud_detector.pkl', 'rb'))
-            mask         = np.all(refs >= 0.0001, axis=0).reshape(10980, 10980)
-            cloud_probs  = classifier.predict_proba(refs[:, mask.ravel()].T)[:,1]
-            cloud        = np.zeros((10980, 10980))
-            cloud[mask]  = cloud_probs
-            cloud_mask   = cloud > 0.75
-            cloud_mask   = binary_erosion (cloud_mask, disk(4))
-            self.cloud   = binary_dilation(cloud_mask, disk(6))
-            g            = gdal.Open(self.s2_file_dir+'/B04.jp2')
-            driver       = gdal.GetDriverByName('GTiff')
-            g1           = driver.Create(self.s2_file_dir+'/cloud.tif', \
-                                         g.RasterXSize, g.RasterYSize, 1, \
-                                         gdal.GDT_Byte,  options=["TILED=YES", "COMPRESS=DEFLATE"])
-            g1.SetGeoTransform(g.GetGeoTransform())
-            g1.SetProjection  (g.GetProjection()  )
-            g1.GetRasterBand(1).WriteArray((cloud * 100).astype(int))
-            g1=None; g=None
-        else:
-            cloud = gdal.Open(self.s2_file_dir+\
-                             '/cloud.tif').ReadAsArray() / 100.
-            cloud_mask   = cloud > 0.75                           
-            cloud_mask   = binary_erosion (cloud_mask, disk(4))     
-            self.cloud   = binary_dilation(cloud_mask, disk(6)) 
 
-        mask = (self.imgs['B04'] >= 1.)
-        self.cloud_cover = 1. * self.cloud.sum() / mask.sum()
+        needed_bands = ['B01', 'B02', 'B03', 'B04', 'B05', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
+        cloud_bands  = ['B01', 'B02', 'B04', 'B05', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
+        ratio        = [ 6,     1,     1,     2,     1,     2,     6,     6,     2,     2]
+        fname        = [self.s2_file_dir+'/%s.jp2'%i for i in needed_bands]
+        pool         = Pool(processes=len(fname))
+        ret          = pool.map(read_s2_band, fname)
+        imgs         = dict(zip(needed_bands, ret))
+        refs         = np.array([np.repeat(np.repeat(imgs[band]/10000., ratio[i], axis=0), ratio[i], axis=1) for i, band in enumerate(cloud_bands)]).reshape(10,-1)
+        classifier   = pkl.load(open('./data/sen2cloud_detector.pkl', 'rb'))
+        mask         = np.all(refs >= 0.0001, axis=0).reshape(10980, 10980)
+        cloud_probs  = classifier.predict_proba(refs[:, mask.ravel()].T)[:,1]
+        cloud        = np.zeros((10980, 10980))
+        cloud[mask]  = cloud_probs
+        cloud_mask   = cloud > 0.4
+        cloud_mask   = binary_erosion (cloud_mask, disk(4))
+        self.cloud   = binary_dilation(cloud_mask, disk(6))
+        g            = gdal.Open(self.s2_file_dir+'/B04.jp2')
+        driver       = gdal.GetDriverByName('GTiff')
+        g1           = driver.Create(self.s2_file_dir+'/cloud.tif', \
+                                     g.RasterXSize, g.RasterYSize, 1, \
+                                     gdal.GDT_Byte,  options=["TILED=YES", "COMPRESS=JPEG"])
+        projection   = g.GetProjection()
+        geotransform = g.GetGeoTransform()
+        g1.SetGeoTransform( geotransform )
+        g1.SetProjection( projection )
+        gcp_count = g.GetGCPs()
+        if gcp_count != 0:
+            g1.SetGCPs( gcp_count, g.GetGCPProjection() )
+        g1.GetRasterBand(1).WriteArray(self.cloud)
+        g1=None; g=None
 
         return self.cloud
         
+        if glob(self.s2_file_dir+'/cloud.tif')==[]:
+            print('Rasterizing cloud mask')
+            g     = gdal.Open(self.s2_file_dir+'/B04.jp2')
+            geo_t = g.GetGeoTransform()
+            x_size, y_size = g.RasterXSize, g.RasterYSize
+            xmin, xmax  = min(geo_t[0], geo_t[0] + x_size * geo_t[1]), \
+                          max(geo_t[0], geo_t[0] + x_size * geo_t[1])
+            ymin, ymax  = min(geo_t[3], geo_t[3] + y_size * geo_t[5]), \
+                          max(geo_t[3], geo_t[3] + y_size * geo_t[5])
+            xRes, yRes  = abs(geo_t[1]), abs(geo_t[5])
+            try:
+                if len(open(self.s2_file_dir+ "/qi/MSK_CLOUDS_B00.gml", 'rb').readlines())>5:
+                    self.cirrus = gdal.Rasterize("", self.s2_file_dir+ "/qi/MSK_CLOUDS_B00.gml", \
+                                                 format="MEM", xRes=xRes, yRes=yRes, where="maskType='CIRRUS'", \
+                                                 outputBounds=[xmin, ymin, xmax, ymax], noData=np.nan, burnValues=1).ReadAsArray()
+                else:
+                    self.cirrus = np.zeros((x_size, y_size)).astype(bool)
+            except:
+                self.cirrus = np.zeros((x_size, y_size)).astype(bool)
+            try:
+                if len(open(self.s2_file_dir+ "/qi/MSK_CLOUDS_B00.gml", 'rb').readlines())>5:
+                    self.cloud  = gdal.Rasterize("", self.s2_file_dir+ "/qi/MSK_CLOUDS_B00.gml", \
+                                             format="MEM", xRes=xRes, yRes=yRes, where="maskType='OPAQUE'", \
+                                             outputBounds=[xmin, ymin, xmax, ymax], noData=np.nan, burnValues=2).ReadAsArray()
+                else:
+                    self.cloud = np.zeros((x_size, y_size)).astype(bool)
+            except:
+                self.cloud  = np.zeros((x_size, y_size)).astype(bool)
+            cloud_mask  = self.cirrus + self.cloud
+            driver = gdal.GetDriverByName('GTiff')
+            g1 = driver.Create(self.s2_file_dir+'/cloud.tif', \
+                               g.RasterXSize, g.RasterYSize, 1, gdal.GDT_Byte,  options=["TILED=YES", "COMPRESS=JPEG"])
+            projection   = g.GetProjection()
+            geotransform = g.GetGeoTransform()
+            g1.SetGeoTransform( geotransform )
+            g1.SetProjection( projection )
+            gcp_count = g.GetGCPs()
+            if gcp_count != 0:
+                g1.SetGCPs( gcp_count, g.GetGCPProjection() )
+            g1.GetRasterBand(1).WriteArray(cloud_mask)
+            g1=None; g=None
+        else:
+            cloud_mask = gdal.Open(self.s2_file_dir+\
+                                   '/cloud.tif').ReadAsArray()
+        self.cirrus = (cloud_mask == 1)
+        self.cloud  = (cloud_mask >= 2)
+        #self.cloud[:] = False
+        self.cloud_cover = 1.*(self.cloud==2)/self.cloud.size
 
     def get_s2_angles(self, reconstruct = True, slic = None):
 
@@ -285,10 +345,10 @@ class read_s2(object):
                 print('Reconstruct failed and original angles are used.')
 if __name__ == '__main__':
     
-    s2 = read_s2('/store/S2_data/', '50SMH', \
-                  2017, 10, 12, bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12'] )
+    s2 = read_s2('/store/S2_data/', '50SLH', \
+                  2016, 3, 14, bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12'] )
     '''
     s2.selected_img = s2.get_s2_toa() 
     '''
-    cm = s2.get_s2_cloud()
+    s2.get_s2_cloud()
     #s2.get_s2_angles()

@@ -336,7 +336,7 @@ class solve_aerosol(object):
         self.tcwv       = tcwv / 10. 
         self.s2_logger.info('Mean values from ECMWF forcasts are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
         #self._get_ddv_aot(selected_img, tcwv, tco3, ele_data)
-        self.aot_unc    = np.ones(self.aot.shape)  * 0.8
+        self.aot_unc    = np.ones(self.aot.shape)  * 1.
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.2
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.2
         self.s2_logger.info('Trying to get the tcwv from the emulation of sen2cor look up table.')
@@ -429,7 +429,7 @@ class solve_aerosol(object):
                                            self.emus,
                                            self.band_indexs,
                                            self.boa_bands,
-                                           gamma = 2.)
+                                           gamma = 1.)
             solved    = self.aero._optimization()
             return solved
 

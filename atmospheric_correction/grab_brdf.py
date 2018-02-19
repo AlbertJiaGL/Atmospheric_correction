@@ -204,7 +204,7 @@ def MCD43_SurRef(MCD43_dir, example_file, year, doy, ang_files, sun_view_ang_sca
     k_vol   = kk.Ross
     k_geo   = kk.Li
     sur_ref = (dat[0] + dat[1]*k_vol + dat[2]*k_geo)*0.001
-    wei     = 0.05 / wei
+    wei     = 0.025 / wei
     #print wei
     unc     = np.sqrt(wei[0, :, :]**2 + (wei[1, :, :]**2)*k_vol**2 + (wei[2, :, :]**2)*k_geo**2)
     #unc     = np.sqrt((np.sqrt(std[:, 0, :]**2 + (std[:, 1, :]**2)*k_vol**2 + (std[:, 2, :]**2)*k_geo**2) * 0.001)**2 + \
