@@ -1,4 +1,5 @@
 #/usr/bin/env python 
+import os
 import sys
 sys.path.insert(0, 'util')
 import numpy as np
@@ -10,6 +11,12 @@ except:
 from scipy import optimize
 from fastDiff import fastDiff
 from multi_process import parmap
+
+#turn off multithreading
+os.environ['OPENBLAS_NUM_THREADS'] = '1' 
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OMP_NUM_THREADS'] = '1'
+
 
 class solving_atmo_paras(object): 
     '''

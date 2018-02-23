@@ -20,6 +20,7 @@ from smoothn import smoothn
 from grab_s2_toa import read_s2
 from multi_process import parmap
 from reproject import reproject_data
+from scipy.fftpack import dct, idct
 from scipy.interpolate import griddata
 from grab_brdf import MCD43_SurRef, array_to_raster
 #from grab_uncertainty import grab_uncertainty
@@ -149,6 +150,7 @@ class solve_aerosol(object):
                                                                          self.num_blocks, self.block_size), axis = (3,1)) + 0.05
             else:
                 self.logger.warning('Failed to get TCWV from sen2cor look up table and ECMWF tcwv is used.')
+
     def _get_psf(self, selected_img):
         self.logger.info('No PSF parameters specified, start solving.')
         high_img    = np.repeat(np.repeat(selected_img['B11'], 2, axis=0), 2, axis=1)*0.0001
@@ -335,7 +337,7 @@ class solve_aerosol(object):
         self.tcwv       = tcwv / 10. 
         self.logger.info('Mean values from ECMWF forcasts are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
         #self._get_ddv_aot(selected_img, tcwv, tco3, ele_data)
-        self.aot_unc    = np.ones(self.aot.shape)  * 0.4
+        self.aot_unc    = np.ones(self.aot.shape)  * 0.5
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.1
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.1
         
@@ -371,14 +373,21 @@ class solve_aerosol(object):
         self.bad_pixs = self.bad_pix[self.Hx, self.Hy]
         del selected_img; del s2.imgs; del s2.angles['vza']; del s2.angles['vaa']
         del s2.angles['sza']; del s2.angles['saa']; del s2.sza; del s2.saa; del s2
-        ker = self.gaussian(xstd, ystd, ang) 
-        f   = lambda img: signal.fftconvolve(img, ker, mode='same')[self.Hx, self.Hy]*0.0001 
-        half = parmap(f,imgs[:3])
-        self.s2_toa = np.array(half + parmap(f,imgs[3:]))
-        border_mask = (self.Hx > 10830) | (self.Hx < 150) | (self.Hy > 10830) | (self.Hy < 150)
-        points      = np.array([self.Hx[~border_mask], self.Hy[~border_mask]]).T
-        self.s2_toa = np.array([griddata(points, self.s2_toa[i,~border_mask], \
-                              (self.Hx, self.Hy), method='nearest') for i in range(self.s2_toa.shape[0])])
+
+        xstd, ystd = 29.75, 39
+        xgaus  = np.exp(-2.*(np.pi**2)*(xstd**2)*((0.5 * np.arange(10980) /10980)**2))
+        ygaus  = np.exp(-2.*(np.pi**2)*(ystd**2)*((0.5 * np.arange(10980) /10980)**2))
+        gaus_2d = np.outer(ygaus, xgaus)
+        f   = lambda img: idct(idct(dct(dct(img, axis=0, norm = 'ortho'), axis=1, norm='ortho') * gaus_2d, \
+                                            axis=1, norm='ortho'), axis=0, norm='ortho')[self.Hx, self.Hy]*0.0001
+        #ker    = self.gaussian(xstd, ystd, ang) 
+        #f   = lambda img: signal.fftconvolve(img, ker, mode='same')[self.Hx, self.Hy]*0.0001 
+        #half = parmap(f,imgs[:3])
+        self.s2_toa  = np.array(parmap(f,imgs)) #np.array(half + parmap(f,imgs[3:]))
+        #border_mask = (self.Hx > 10830) | (self.Hx < 150) | (self.Hy > 10830) | (self.Hy < 150)
+        #points      = np.array([self.Hx[~border_mask], self.Hy[~border_mask]]).T
+        #self.s2_toa = np.array([griddata(points, self.s2_toa[i,~border_mask], \
+        #                      (self.Hx, self.Hy), method='nearest') for i in range(self.s2_toa.shape[0])])
         del imgs
         # get the valid value masks
         qua_mask = np.all(self.s2_boa_qa <= self.qa_thresh, axis = 0)
@@ -436,7 +445,7 @@ class solve_aerosol(object):
                                            self.emus,
                                            self.band_indexs,
                                            self.boa_bands,
-                                           gamma = 10.)
+                                           gamma = 15.)
             solved = self.aero._optimization()
             return solved
 
@@ -502,10 +511,10 @@ class solve_aerosol(object):
         self.logger.info('Finished retrieval and saving them into local files.')
         self._example_g = gdal.Open(self.s2_file_dir+'/B04.jp2')
         para_names      = 'aot', 'tcwv', 'tco3', 'aot_unc', 'tcwv_unc', 'tco3_unc'
-        high_aod        = (self.solved[0] > 0.5) & \
-                          (self.solved[0] < 1.7)                                                                                      
-        self.solved[0][high_aod] = self.solved[0][high_aod] + \
-                                  (self.solved[0][high_aod] - 0.5) * 0.08
+        #high_aod        = (self.solved[0] > 0.5) & \
+        #                  (self.solved[0] < 1.7)                                                                                      
+        #self.solved[0][high_aod] = self.solved[0][high_aod] + \
+        #                          (self.solved[0][high_aod] - 0.5) * 0.08
         arrays          = list(self.solved ) + list(self.unc)
         name_arrays     = zip(para_names, arrays)
         ret = parmap(self._save_posterior, name_arrays)
@@ -514,14 +523,14 @@ class solve_aerosol(object):
 
     def _save_posterior(self, name_array):
         name, array = name_array
-        if (self.mask.sum() > 0) & ('unc' not in name):
-            self.mask[:2,  :] = False
-            self.mask[:, -2:] = False
-            self.mask[:,  :2] = False
-            self.mask[-2:, :] = False 
-            array = griddata(np.array(np.where(self.mask)).T, array[self.mask], \
-                                     (np.repeat(range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks), \
-                                      np.tile  (range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks)), method='nearest')
+        #if (self.mask.sum() > 0) & ('unc' not in name):
+            #self.mask[:2,  :] = False
+            #self.mask[:, -2:] = False
+            #self.mask[:,  :2] = False
+            #self.mask[-2:, :] = False 
+            #array = griddata(np.array(np.where(self.mask)).T, array[self.mask], \
+            #                         (np.repeat(range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks), \
+            #                          np.tile  (range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks)), method='nearest')
             #array[~self.mask] = np.nanmean(array[self.mask])
         xmin, ymax  = self._example_g.GetGeoTransform()[0], \
                       self._example_g.GetGeoTransform()[3]
