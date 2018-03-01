@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#/usr/bin/env python
 import gdal
 import os
 import sys
@@ -67,8 +67,8 @@ class read_s2(object):
         return dict(zip(self.bands, selc_imgs))
 
     def get_s2_cloud(self,):
-        self._read_all(self.done)  
         if len(glob(self.s2_file_dir+'/cloud.tif'))==0:
+            self._read_all(self.done)  
             cloud_bands  = ['B01', 'B02', 'B04', 'B05', 'B08', 'B8A', 'B09', 'B10', 'B11', 'B12']
             ratio        = [ 6,     1,     1,     2,     1,     2,     6,     6,     2,     2]
             
@@ -99,15 +99,21 @@ class read_s2(object):
             cloud_mask   = binary_erosion (cloud_mask, disk(2))     
             self.cloud   = binary_dilation(cloud_mask, disk(3)) 
             self.cloud   = np.repeat(np.repeat(self.cloud,6, axis = 0), 6, axis = 1)
-
-        mask = (self.imgs['B04'] >= 1.)
+        try:
+            mask = self.imgs['B04'] >= 1.
+        except:
+            mask = gdal.Open(self.s2_file_dir + '/B04.jp2').ReadAsArray() >= 1.
         self.cloud_cover = 1. * self.cloud.sum() / mask.sum()
 
         return self.cloud
         
+    def get_s2_angles(self, reconstruct = False):
+        if len(glob(self.s2_file_dir + '/angles/VAA_VZA_*.tif')) == 1:
+            pass
+        else:
+            self._get_s2_angles(reconstruct=reconstruct)
 
-    def get_s2_angles(self, reconstruct = True, slic = None):
-
+    def _get_s2_angles(self, reconstruct = True):
 
         tree = ET.parse(self.s2_file_dir+'/metadata.xml')
         root = tree.getroot()
@@ -174,6 +180,21 @@ class read_s2(object):
         self.saa, self.sza = np.repeat(np.repeat(np.array(saa), 500, axis = 0), 500, axis = 1)[:10980, :10980], \
                              np.repeat(np.repeat(np.array(sza), 500, axis = 0), 500, axis = 1)[:10980, :10980]
 
+        g                = gdal.Open(self.s2_file_dir + '/B04.jp2')
+        geo              = g.GetGeoTransform()
+        projection       = g.GetProjection()
+        geotransform     = (geo[0], 5000, geo[2], geo[3], geo[4], -5000)
+        outputFileName   = self.s2_file_dir + '/angles/SAA_SZA.tif'
+        if os.path.exists(outputFileName):
+            os.remove(outputFileName)
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, 23, 23, 2, gdal.GDT_Int16, options=["TILED=YES", "COMPRESS=DEFLATE"])
+        dst_ds.SetGeoTransform(geotransform)   
+        dst_ds.SetProjection(projection) 
+        dst_ds.GetRasterBand(1).WriteArray((saa * 100).astype(int))
+        dst_ds.GetRasterBand(2).WriteArray((sza * 100).astype(int))
+        dst_ds.FlushCache()                     
+        dst_ds, g = None, None
+
         dete_id = np.unique([i[1] for i in vaa.keys()])
         band_id = range(13)
         bands_vaa = []
@@ -206,10 +227,7 @@ class read_s2(object):
                 mva_[band] = np.nanmean([mva[z] for z in mva.keys()])
                 mvz_[band] = np.nanmean([mvz[z] for z in mvz.keys()])
 
-        if self.bands is None:
-            bands = self.s2_bands
-        else:
-            bands = self.bands
+        bands = self.s2_bands
         self.vza = {}; self.vaa = {}
         self.mvz = {}; self.mva = {}
         for band in bands:
@@ -228,7 +246,7 @@ class read_s2(object):
             mask  = np.isnan(vaa[band]) 
             if (~mask).sum() == 0:
                 g_vaa    = np.zeros((23, 23))
-                m_vaa    = np.nanmean([mva_[_] for _ in bands])
+                m_vaa    = np.nanmean(mva_.values())
                 g_vaa[:] = m_vaa      if not np.isnan(m_vaa)      else 0
                 g_vaa[:] = mva_[band] if not np.isnan(mva_[band]) else g_vaa[0, 0]
                 self.mva[band]   = m_vaa      if not np.isnan(m_vaa)      else 0
@@ -239,29 +257,44 @@ class read_s2(object):
                                  np.tile  (range(23), 23).reshape(23,23)), method='nearest') 
                 self.mvz[band]   = mvz_[band] 
                 self.mva[band]   = mva_[band]
-            self.vza[band]   = np.repeat(np.repeat(g_vza, 500, axis = 0), 500, axis = 1)[:10980, :10980]
-            g_vaa[g_vaa>180] = g_vaa[g_vaa>180] - 360
-            self.vaa[band]   = np.repeat(np.repeat(g_vaa, 500, axis = 0), 500, axis = 1)[:10980, :10980]
-
 
             # seems like scene containing positive and negative vaa
             # is more likely to have the wrong vaa angle and the mean value is used
-            if not ((self.vaa[band] <= 0).all() or (self.vaa[band] >= 0).all()):
-                reconstruct = False # no need for reconstruct anymore
-                self.vaa[band][:]                    = self.mva[band] 
-                self.vaa[band][self.vaa[band] > 180] = self.vaa[band][self.vaa[band] > 180] - 360
+            if not ((g_vaa <= 0).all() or (g_vaa >= 0).all()):
+                reconstruct        = False # no need for reconstruct anymore
+                g_vaa[:]           = self.mva[band] 
+
+            g_vaa[g_vaa>180] = g_vaa[g_vaa>180] - 360
+            self.vza[band]   = np.repeat(np.repeat(g_vza, 500, axis = 0), 500, axis = 1)[:10980, :10980]
+            self.vaa[band]   = np.repeat(np.repeat(g_vaa, 500, axis = 0), 500, axis = 1)[:10980, :10980]
+
+            g                = gdal.Open(self.s2_file_dir + '/B04.jp2')
+            geo              = g.GetGeoTransform()
+            projection       = g.GetProjection()
+            geotransform     = (geo[0], 5000, geo[2], geo[3], geo[4], -5000)
+            outputFileName   = self.s2_file_dir + '/angles/VAA_VZA_%s.tif'%band
+            if os.path.exists(outputFileName):
+                os.remove(outputFileName)
+            dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, 23, 23, 2, gdal.GDT_Int16, options=["TILED=YES", "COMPRESS=DEFLATE"])
+            dst_ds.SetGeoTransform(geotransform)   
+            dst_ds.SetProjection(projection) 
+            dst_ds.GetRasterBand(1).WriteArray((g_vaa * 100).astype(int))
+            dst_ds.GetRasterBand(2).WriteArray((g_vza * 100).astype(int))
+            dst_ds.FlushCache()                     
+            dst_ds, g = None, None
         self.angles = {'sza':self.sza, 'saa':self.saa, 'msz':self.msz, 'msa':self.msa,\
                            'vza':self.vza, 'vaa': self.vaa, 'mvz':self.mvz, 'mva':self.mva}
 
         if reconstruct:
             try:
-                if len(glob(self.s2_file_dir + '/angles/VAA_VZA_*.tif')) == 13:
-                    pass
-                else:
+                #if len(glob(self.s2_file_dir + '/angles/VAA_VZA_*.tif')) == 13:
+                #    pass
+                #else:
 		    #print 'Reconstructing Sentinel 2 angles...'
-                    s2a_angle(self.s2_file_dir+'/metadata.xml')
+                s2a_angle(self.s2_file_dir+'/metadata.xml')
 		    #subprocess.call(['python', './python/s2a_angle_bands_mod.py', \
 		    #                  self.s2_file_dir+'/metadata.xml',  '10'])
+            
                 if self.bands is None:
                     bands = self.s2_bands
                 else:
@@ -274,13 +307,8 @@ class read_s2(object):
                     for i,angs in enumerate(ret):
 		        #angs[0][angs[0]<0] = (36000 + angs[0][angs[0]<0])
                         angs = angs.astype(float)/100.
-                        if slic is None:
-                            self.vaa[bands[i]] = angs[0]
-                            self.vza[bands[i]] = angs[1]
-                        else:
-                            x_ind, y_ind = np.array(slic)
-                            self.vaa[bands[i]] = angs[0][x_ind, y_ind]
-                            self.vza[bands[i]] = angs[1][x_ind, y_ind]
+                        self.vaa[bands[i]] = angs[0]
+                        self.vza[bands[i]] = angs[1]
                     self.angles = {'sza':self.sza, 'saa':self.saa, 'msz':self.msz, 'msa':self.msa,\
                                    'vza':self.vza, 'vaa': self.vaa, 'mvz':self.mvz, 'mva':self.mva}
                 else:

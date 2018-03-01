@@ -523,15 +523,15 @@ class solve_aerosol(object):
 
     def _save_posterior(self, name_array):
         name, array = name_array
-        #if (self.mask.sum() > 0) & ('unc' not in name):
-            #self.mask[:2,  :] = False
-            #self.mask[:, -2:] = False
-            #self.mask[:,  :2] = False
-            #self.mask[-2:, :] = False 
-            #array = griddata(np.array(np.where(self.mask)).T, array[self.mask], \
-            #                         (np.repeat(range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks), \
-            #                          np.tile  (range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks)), method='nearest')
-            #array[~self.mask] = np.nanmean(array[self.mask])
+        self.mask[:2,  :] = False  
+        self.mask[:, -2:] = False  
+        self.mask[:,  :2] = False  
+        self.mask[-2:, :] = False
+        if (self.mask.sum() > 0) & ('unc' not in name):
+            array = griddata(np.array(np.where(self.mask)).T, array[self.mask], \
+                                     (np.repeat(range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks), \
+                                      np.tile  (range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks)), method='nearest')
+        
         xmin, ymax  = self._example_g.GetGeoTransform()[0], \
                       self._example_g.GetGeoTransform()[3]
         projection  = self._example_g.GetProjection()

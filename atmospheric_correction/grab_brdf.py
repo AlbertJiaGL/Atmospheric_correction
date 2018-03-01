@@ -177,17 +177,17 @@ def MCD43_SurRef(MCD43_dir, example_file, year, doy, ang_files, sun_view_ang_sca
     #print 'get angles...'
     sa_files, va_files = ang_files
     if isinstance(va_files[0], str):
-        f   = lambda ang_file: reproject_data(ang_file, gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float64).data
+        f   = lambda ang_file: reproject_data(ang_file, gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float64, resample = gdal.GRIORA_NearestNeighbour).data
         vas = np.array(parmap(f, va_files))
     elif isinstance(va_files[0], (np.ndarray, np.generic) ):
-        f   = lambda array: reproject_data(array_to_raster(array, example_file), gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float64).data
+        f   = lambda array: reproject_data(array_to_raster(array, example_file), gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float64, resample = gdal.GRIORA_NearestNeighbour).data
         vas =  np.array(parmap(f, list(va_files)))
     vas = vas * sun_view_ang_scale[1]
     if isinstance(sa_files[0], str):
-        f   = lambda ang_file: reproject_data(ang_file, gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float64).data
+        f   = lambda ang_file: reproject_data(ang_file, gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float64, resample = gdal.GRIORA_Bilinear).data
         sas = np.array(parmap(f, sa_files)) 
     elif isinstance(sa_files[0], (np.ndarray, np.generic) ):
-        f   = lambda array: reproject_data(array_to_raster(array, example_file), gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float32).data
+        f   = lambda array: reproject_data(array_to_raster(array, example_file), gdal.BuildVRT('', list(fnames[0,0])), outputType = gdal.GDT_Float32, resample = gdal.GRIORA_Bilinear).data
         sas =  np.array(parmap(f, list(sa_files)))
         
     if sas.shape[0] == 2:

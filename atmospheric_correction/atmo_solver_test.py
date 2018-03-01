@@ -13,9 +13,9 @@ from fastDiff import fastDiff
 from multi_process import parmap
 
 #turn off multithreading
-os.environ['OPENBLAS_NUM_THREADS'] = '1' 
-os.environ['MKL_NUM_THREADS'] = '1'
-os.environ['OMP_NUM_THREADS'] = '1'
+#os.environ['OPENBLAS_NUM_THREADS'] = '1' 
+#os.environ['MKL_NUM_THREADS'] = '1'
+#os.environ['OMP_NUM_THREADS'] = '1'
 
 
 class solving_atmo_paras(object): 
@@ -147,8 +147,8 @@ class solving_atmo_paras(object):
 
     def _helper(self, inp):
         H, _, dH = inp[0].predict(inp[1][:, self.mask.ravel()].T, do_unc=True)
-        tmp1    = np.zeros((self.num_blocks_x, self.num_blocks_y))
-        tmp2    = np.zeros((self.num_blocks_x, self.num_blocks_y, 3))
+        tmp1     = np.zeros((self.num_blocks_x, self.num_blocks_y))
+        tmp2     = np.zeros((self.num_blocks_x, self.num_blocks_y, 3))
         tmp1[self.mask] = H
         tmp2[self.mask, :] = np.array(dH)[:,3:6]
         return np.hstack([tmp1[self.resample_hx, self.resample_hy][..., None], tmp2[self.resample_hx, self.resample_hy, :]])
