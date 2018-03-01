@@ -14,7 +14,7 @@ from scipy.interpolate import griddata
 from scipy.signal import fftconvolve
 #import subprocess
 #from s2a_angle_bands_mod import s2a_angle
-from s2_angle_resample import resample_s2_angles
+from s2_Angle_resample import resample_s2_angles
 from reproject import reproject_data
 from multi_process import parmap
 from skimage.morphology import disk, binary_dilation, binary_erosion
@@ -110,10 +110,13 @@ class read_s2(object):
         
     def get_s2_angles(self, reconstruct = False):
         if len(glob(self.s2_file_dir + '/angles/*.tif')) == 13:
+            self.saa_sza = [self.s2_file_dir + '/angles/SAA_SZA.tif']
+            self.vaa_vza = [self.s2_file_dir + '/angles/VAA_VZA_%s.tif'%i for i in self.bands]
             pass
         else:
             resample_s2_angles(self.s2_file_dir)
-       
+            self.saa_sza = [self.s2_file_dir + '/angles/SAA_SZA.tif']
+            self.vaa_vza = [self.s2_file_dir + '/angles/VAA_VZA_%s.tif'%i for i in self.bands]
 if __name__ == '__main__':
     s2 = read_s2('/store/S2_data/', '50SMH', \
                   2017, 10, 12, bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12'] )
