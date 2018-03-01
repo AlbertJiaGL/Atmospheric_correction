@@ -109,7 +109,7 @@ class read_s2(object):
         return self.cloud
         
     def get_s2_angles(self, reconstruct = False):
-        if len(glob(self.s2_file_dir + '/angles/*.tif')) == 13:
+        if len(glob(self.s2_file_dir + '/angles/*.tif')) == 14:
             self.saa_sza = [self.s2_file_dir + '/angles/SAA_SZA.tif']
             self.vaa_vza = [self.s2_file_dir + '/angles/VAA_VZA_%s.tif'%i for i in self.bands]
             pass

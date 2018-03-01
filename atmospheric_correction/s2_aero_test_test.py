@@ -17,7 +17,7 @@ except:
 from osgeo import osr
 from scipy.ndimage import binary_dilation, binary_erosion
 from smoothn import smoothn
-from grab_s2_toa import read_s2
+from grab_s2_toa_test import read_s2
 from multi_process import parmap
 from reproject import reproject_data
 from scipy.fftpack import dct, idct
@@ -116,11 +116,15 @@ class solve_aerosol(object):
     def _get_tcwv(self):
         b8a       = np.repeat(np.repeat(self.target_bands['B8A']*0.0001, 2, axis=0), 2, axis=1)[self.Hx, self.Hy]
         b9        = np.repeat(np.repeat(self.target_bands['B09']*0.0001, 6, axis=0), 6, axis=1)[self.Hx, self.Hy]
-        vaa, vza  = gdal.Open(self.s2.s2_file_dir + '/angles/VAA_VZA_B09.tif').ReadAsArray()[:, self.Hx, self.Hy]
-        saa, sza  = gdal.Open(self.s2.s2_file_dir + '/angles/SAA_SZA.tif'    ).ReadAsArray()[:, self.Hx, self.Hy]
+        vaa, vza  = gdal.Open(self.s2_file_dir + '/angles/VAA_VZA_B09.tif').ReadAsArray()[:, self.Hx, self.Hy] / 100.
 
-        elevation = reproject_data(self.global_dem, self.example_file, \
-                                   outputType= gdal.GDT_Float32, resample = gdal.GRIORA_Bilinear).data[self.Hx, self.Hy]
+        f        = lambda fname: reproject_data(fname, \
+                                                self.example_file, \
+                                                outputType= gdal.GDT_Float32, resample = gdal.GRIORA_Bilinear).data
+        fnames   = self.sa_files + [self.global_dem, ]
+        ret      = parmap(f, fnames)
+        saa, sza = ret[0][:, self.Hx, self.Hy] /100.
+        elevation = ret[1][self.Hx, self.Hy] / 1000.
         try:
             wv_emus   = pkl.load(open(self.wv_emus_dir, 'rb'))
         except:
@@ -156,7 +160,6 @@ class solve_aerosol(object):
         if self.s2_psf is not None:
             xstd, ystd, ang, xs, ys = self.s2_psf
         else:
-            xstd, ystd, ang, xs, ys = self.s2_psf
             self.logger.info('No PSF parameters specified, start solving.')
             high_img    = np.repeat(np.repeat(self.target_bands['B11'], 2, axis=0), 2, axis=1)*0.0001
             high_indexs = self.Hx, self.Hy
@@ -277,7 +280,7 @@ class solve_aerosol(object):
     def _resample_angles_and_elevation(self):
 
         f        = lambda fname: reproject_data(fname, \
-                                                self.s2.s2_file_dir + '/B04.jp2', \
+                                                self.s2_file_dir + '/B04.jp2', \
                                                 outputType= gdal.GDT_Float32, xRes=self.aero_res, \
                                                 yRes=self.aero_res, resample = gdal.GRIORA_NearestNeighbour).data / 100.
 
@@ -285,14 +288,13 @@ class solve_aerosol(object):
         self.vaa, self.vza = ret[:, 0], ret[:, 1]
 
         f        = lambda fname: reproject_data(fname, \
-                                                self.s2.s2_file_dir + '/B04.jp2', \
+                                                self.s2_file_dir + '/B04.jp2', \
                                                 outputType= gdal.GDT_Float32, xRes=self.aero_res, \
                                                 yRes=self.aero_res, resample = gdal.GRIORA_Bilinear).data
 
         fnames   = self.sa_files + [self.global_dem, ]
-        ret      = np.array(parmap(f, fnames)) 
-        self.saa, self.sza = ret[0]
-        self.saa, self.sza = self.saa / 100., self.sza / 100.
+        ret      = parmap(f, fnames)
+        self.saa, self.sza = ret[0] / 100.
         ele_data = ret[1]
         mask     = ~np.isfinite(ele_data)
         self.ele = np.ma.array(ele_data, mask = mask) / 1000.
@@ -301,8 +303,8 @@ class solve_aerosol(object):
     def _get_boa(self, s2):
 
         s2.get_s2_angles()        
-        self.sa_files = s2.saa_sza
-        self.va_files = s2.vaa_vza                                                                                                                                         
+        self.sa_files = s2.saa_sza[:6]
+        self.va_files = s2.vaa_vza[:6]
         if len(glob(self.s2_file_dir + '/MCD43.npz')) == 0:
             boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, self.example_file, \
                                                            self.year, self.doy, [sa_files, va_files],
@@ -371,9 +373,9 @@ class solve_aerosol(object):
         self._load_xa_xb_xc_emus()
         
         self.logger.info( 'Getting the angles and simulated surface reflectance.')
-        self._resample_angles_and_elevation()
         boa, unc, hx, hy, lx, ly, flist = self._get_boa(s2)
         self.Hx, self.Hy = hx, hy        
+        self._resample_angles_and_elevation()
 
         self.logger.info('Update cloud mask.') 
         self.mask_bad_pix()
