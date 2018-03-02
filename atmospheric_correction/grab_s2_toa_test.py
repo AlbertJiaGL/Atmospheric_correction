@@ -1,4 +1,4 @@
-#/usr/bin/env python
+#!/usr/bin/env python
 import gdal
 import os
 import sys
@@ -12,8 +12,6 @@ from multiprocessing import Pool
 from glob import glob
 from scipy.interpolate import griddata
 from scipy.signal import fftconvolve
-#import subprocess
-#from s2a_angle_bands_mod import s2a_angle
 from s2_Angle_resample import resample_s2_angles
 from reproject import reproject_data
 from multi_process import parmap
@@ -108,11 +106,10 @@ class read_s2(object):
 
         return self.cloud
         
-    def get_s2_angles(self, reconstruct = False):
+    def get_s2_angles(self):
         if len(glob(self.s2_file_dir + '/angles/*.tif')) == 14:
             self.saa_sza = [self.s2_file_dir + '/angles/SAA_SZA.tif']
             self.vaa_vza = [self.s2_file_dir + '/angles/VAA_VZA_%s.tif'%i for i in self.bands]
-            pass
         else:
             resample_s2_angles(self.s2_file_dir)
             self.saa_sza = [self.s2_file_dir + '/angles/SAA_SZA.tif']
