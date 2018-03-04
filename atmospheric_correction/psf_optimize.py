@@ -145,7 +145,7 @@ class psf_optimize(object):
         self.paras, self.costs = np.array([i[0] for i in self.shift_solved]), \
                                            np.array([i[1] for i in self.shift_solved])
 
-        xs, ys = self.paras[self.costs==self.costs.min()][0].astype(int)
+        xs, ys = self.paras[self.costs==np.nanmin(self.costs)][0].astype(int)
         if self.costs.min() == 100000000000.:
             xs, ys = 0, 0
         #print 'Best shift is ', xs, ys, 'with the correlation of', 1-self.costs.min()

@@ -17,14 +17,14 @@ except:
 from osgeo import osr
 from scipy.ndimage import binary_dilation, binary_erosion
 from smoothn import smoothn
-from grab_s2_toa_test import read_s2
+from grab_s2_toa import read_s2
 from multi_process import parmap
 from reproject import reproject_data
 from scipy.fftpack import dct, idct
 from scipy.interpolate import griddata
 from grab_brdf import MCD43_SurRef, array_to_raster
 #from grab_uncertainty import grab_uncertainty
-from atmo_solver_test import solving_atmo_paras
+from atmo_solver import solving_atmo_paras
 #from emulation_engine import AtmosphericEmulationEngine
 from psf_optimize import psf_optimize
 import warnings
@@ -269,10 +269,12 @@ class solve_aerosol(object):
         return cost.sum()
 
     def mask_bad_pix(self):
-        ndvi                 = (self.target_bands['B08']-self.target_bands['B04'])/(1. * self.target_bands['B04'] + self.target_bands['B08'])
-        water_mask           = ((ndvi < 0.01) & (self.target_bands['B08'] < 1100)) | ((ndvi < 0.1) & (self.target_bands['B08'] < 500)) | \
-                                                  np.repeat(np.repeat((self.target_bands['B12'] < 1), 2, axis=0), 2, axis=1)
+        b8, b4 = self.target_bands['B08'].astype(float), self.target_bands['B04'].astype(float)
+        ndvi                 = (b8 - b4)/(b8 + b4)
+        water_mask           = ((ndvi < 0.01) & (b8 < 1100)) | ((ndvi < 0.1) & (b8 < 500)) | \
+                                np.repeat(np.repeat((self.target_bands['B12'] < 1), 2, axis=0), 2, axis=1)
         self.ker_size        = int(round(max(1.96 * 29.75, 1.96 * 39)))
+        water_mask           = binary_dilation(water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool)
         self.water_mask      = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool) 
         self.bad_pix         = binary_dilation(self.cloud | self.water_mask, \
                                structure=np.ones((3,3)).astype(bool), iterations=int(self.ker_size/2)).astype(bool)
@@ -303,11 +305,11 @@ class solve_aerosol(object):
     def _get_boa(self, s2):
 
         s2.get_s2_angles()        
-        self.sa_files = s2.saa_sza[:6]
+        self.sa_files = s2.saa_sza
         self.va_files = s2.vaa_vza[:6]
         if len(glob(self.s2_file_dir + '/MCD43.npz')) == 0:
             boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, self.example_file, \
-                                                           self.year, self.doy, [sa_files, va_files],
+                                                           self.year, self.doy, [self.sa_files, self.va_files],
                                                            sun_view_ang_scale=[0.01, 0.01], bands = [3,4,1,2,6,7], tolz=0.001, reproject=False)
             np.savez(self.s2_file_dir + '/MCD43.npz', boa=boa, unc=unc, hx=hx, hy=hy, lx=lx, ly=ly, flist=flist)
         else:                     
@@ -343,7 +345,6 @@ class solve_aerosol(object):
                    np.all(self.s2_boa >= 0.001, axis = 0) &\
                    np.all(self.s2_boa < 1,      axis = 0)
         toa_mask = np.all(self.s2_toa >= 0.0001,axis = 0)
-         
         self.s2_mask    = boa_mask & qua_mask & toa_mask
         self.Hx         = self.Hx          [self.s2_mask]
         self.Hy         = self.Hy          [self.s2_mask]
@@ -552,6 +553,7 @@ class solve_aerosol(object):
         return array
 
 if __name__ == "__main__":
-    aero = solve_aerosol( 2017, 9, 12, mcd43_dir = '/data/nemesis/MCD43/', s2_toa_dir = '/data/nemesis/S2_data/',\
-                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='50SMG', s2_psf=None)
+    #33TUL on 2017-05-14.
+    aero = solve_aerosol( 2017, 5, 14, mcd43_dir = '/data/nemesis/MCD43/', s2_toa_dir = '/data/nemesis/S2_data/',\
+                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='33TUL', s2_psf=None)
     aero.solving_s2_aerosol()

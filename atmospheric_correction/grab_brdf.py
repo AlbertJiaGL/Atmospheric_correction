@@ -204,12 +204,13 @@ def MCD43_SurRef(MCD43_dir, example_file, year, doy, ang_files, sun_view_ang_sca
     k_vol   = kk.Ross
     k_geo   = kk.Li
     sur_ref = (dat[0] + dat[1]*k_vol + dat[2]*k_geo)*0.001
-    wei     = 0.01 / wei
+    wei     = 0.015 / wei
     #print wei
     unc     = np.sqrt(wei[0, :, :]**2 + (wei[1, :, :]**2)*k_vol**2 + (wei[2, :, :]**2)*k_geo**2)
     #unc     = np.sqrt((np.sqrt(std[:, 0, :]**2 + (std[:, 1, :]**2)*k_vol**2 + (std[:, 2, :]**2)*k_geo**2) * 0.001)**2 + \
     #                  (np.sqrt(wei[0, :, :]**2 + (wei[1, :, :]**2)*k_vol**2 + (wei[2, :, :]**2)*k_geo**2))**2) 
     unc     = np.minimum(unc, 0.1)
+    unc     = np.maximum(unc, 0.015)
     #print unc
     if reproject:
         f_dat   = np.repeat(temp_data[None, ...], len(bands), axis=0).astype(float)
@@ -226,9 +227,10 @@ def MCD43_SurRef(MCD43_dir, example_file, year, doy, ang_files, sun_view_ang_sca
         unc_dat[unc_dat==0] = 0.1
         return f_dat, unc_dat
     else:
-        lx, ly                = np.where(temp_data)
-        sur_ref[sur_ref.mask] = np.nan
-        unc[unc.mask]         = 0.1
+        lx, ly                  = np.where(temp_data)
+        sur_ref[sur_ref.mask]   = np.nan
+        unc[unc.mask]           = 0.1
+        unc.data[unc.data == 0] = 0.1
         return sur_ref.data[:,hmask], unc.data[:,hmask], hx, hy, lx[hmask], ly[hmask], fnames[16,0]
 
 if __name__ == '__main__':
