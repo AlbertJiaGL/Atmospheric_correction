@@ -302,7 +302,6 @@ class solve_aerosol(object):
         ele_data = ret[1]
         mask     = ~np.isfinite(ele_data)
         self.ele = np.ma.array(ele_data, mask = mask) / 1000.
-        self.raa = abs(self.saa[None, ...] - self.vaa)
 
     def _get_boa(self, s2):
 

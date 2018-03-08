@@ -311,7 +311,7 @@ class atmospheric_correction(object):
             xps = [xap, xbp, xcp]
             xhs = [xap_dH, xbp_dH, xcp_dH]
             for bi, band in enumerate(self._band_indexs):    
-                p        = np.array([np.cos(sza), np.cos(vza[bi]), np.cos(abs(saa - vaa[bi])), aot, tcwv, tco3, elevation])
+                p        = np.array([np.cos(sza), np.cos(vza[bi]), abs(np.cos(saa - vaa[bi])), aot, tcwv, tco3, elevation])
                 mp       = p[:, mask]
                 for ei, emu in enumerate([self.xap_emus, self.xbp_emus, self.xcp_emus]):
                     temp1, temp2 = np.zeros_like(p[0]), np.zeros(p[0].shape + (3,))

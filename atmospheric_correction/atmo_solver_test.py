@@ -67,7 +67,7 @@ class solving_atmo_paras(object):
         self.vaa             = np.cos(vaa*np.pi/180.)
         if self.sza.ndim == 3:
             self.sza, self.saa = self.sza[0], self.saa[0]
-        self.raa             = np.cos((self.saa - self.vaa)*np.pi/180.)
+        self.raa             = abs(np.cos((self.saa - self.vaa)*np.pi/180.))
         self.aot_prior       = aot_prior
         self.tcwv_prior      = tcwv_prior
         self.tco3_prior      = tco3_prior
