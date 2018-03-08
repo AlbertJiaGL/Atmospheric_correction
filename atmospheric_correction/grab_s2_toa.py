@@ -78,7 +78,7 @@ class read_s2(object):
             cloud_probs  = classifier.predict_proba(refs[:, mask].T)[:,1]
             cloud        = np.zeros((1830, 1830))
             cloud[mask]  = cloud_probs
-            cloud_mask   = cloud > 0.75
+            cloud_mask   = cloud > 0.9
             cloud_mask   = binary_erosion (cloud_mask, disk(2))
             self.cloud   = binary_dilation(cloud_mask, disk(3))
             self.cloud   = np.repeat(np.repeat(self.cloud,6, axis = 0), 6, axis = 1)
@@ -94,7 +94,7 @@ class read_s2(object):
         else:
             cloud = gdal.Open(self.s2_file_dir+\
                              '/cloud.tif').ReadAsArray()
-            cloud_mask   = cloud > 74 #rounding issue                           
+            cloud_mask   = cloud > 89 #rounding issue                           
             cloud_mask   = binary_erosion (cloud_mask, disk(2))     
             self.cloud   = binary_dilation(cloud_mask, disk(3)) 
             self.cloud   = np.repeat(np.repeat(self.cloud,6, axis = 0), 6, axis = 1)

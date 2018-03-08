@@ -176,6 +176,10 @@ def get_angle(band, vaa, vza, band_dict):
     dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, 10980, 10980, 2, gdal.GDT_Int16, options=["TILED=YES", "COMPRESS=DEFLATE"])
     dst_ds.SetGeoTransform(g1.GetGeoTransform())         
     dst_ds.SetProjection(g1.GetProjection())             
+    mask      = vas < -180                      
+    vas[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vas[~mask]).astype(float)
+    mask      = vzs < 0                              
+    vzs[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vzs[~mask]).astype(float)
     vas[vas>180] = vas[vas>180] - 360                    
     dst_ds.GetRasterBand(1).WriteArray((vas * 100).astype(int))            
     dst_ds.GetRasterBand(2).WriteArray((vzs * 100).astype(int))            

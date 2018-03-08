@@ -73,14 +73,14 @@ class atmospheric_correction(object):
                                                 yRes=self.aero_res, resample = gdal.GRIORA_NearestNeighbour).data / 100.
         ret      = np.array(parmap(f, self.va_files))
         self.vaa, self.vza = ret[:, 0], ret[:, 1]
-        #for i,j in enumerate(self.vaa):
-        #    mask = ~np.isfinite(self.vaa[i])
-        #    self.vaa[i][mask] = np.interp(np.flatnonzero(mask), \
-        #                                  np.flatnonzero(~mask), self.vaa[i][~mask]).astype(float)
-        #for i,j in enumerate(self.vza):                                                           
-        #    mask = ~np.isfinite(self.vza[i])                                                      
-        #    self.vza[i][mask] = np.interp(np.flatnonzero(mask), \
-        #                                  np.flatnonzero(~mask), self.vza[i][~mask]).astype(float)
+        for i,j in enumerate(self.vaa):
+            mask = ~np.isfinite(self.vaa[i])
+            self.vaa[i][mask] = np.interp(np.flatnonzero(mask), \
+                                          np.flatnonzero(~mask), self.vaa[i][~mask]).astype(float)
+        for i,j in enumerate(self.vza):                                                           
+            mask = ~np.isfinite(self.vza[i])                                                      
+            self.vza[i][mask] = np.interp(np.flatnonzero(mask), \
+                                          np.flatnonzero(~mask), self.vza[i][~mask]).astype(float)
     
     def  _get_control_variables(self,):
 
@@ -311,7 +311,7 @@ class atmospheric_correction(object):
             xps = [xap, xbp, xcp]
             xhs = [xap_dH, xbp_dH, xcp_dH]
             for bi, band in enumerate(self._band_indexs):    
-                p        = np.array([np.cos(sza), np.cos(vza[bi]), np.cos(abs(saa - vaa[bi])), aot, tcwv, tco3, elevation])
+                p        = np.array([np.cos(sza), np.cos(vza[bi]), np.cos(saa - vaa[bi]), aot, tcwv, tco3, elevation])
                 mp       = p[:, mask]
                 for ei, emu in enumerate([self.xap_emus, self.xbp_emus, self.xcp_emus]):
                     temp1, temp2 = np.zeros_like(p[0]), np.zeros(p[0].shape + (3,))
@@ -363,5 +363,5 @@ class atmospheric_correction(object):
         return small_data
 
 if __name__=='__main__':
-    atmo_cor = atmospheric_correction(2016, 11, 16, '50SLG', s2_toa_dir='/data/nemesis/S2_data/')
+    atmo_cor = atmospheric_correction(2017, 2, 26, '44RMQ', s2_toa_dir='/data/nemesis/S2_data/')
     atmo_cor.atmospheric_correction()

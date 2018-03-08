@@ -24,7 +24,7 @@ from scipy.fftpack import dct, idct
 from scipy.interpolate import griddata
 from grab_brdf import MCD43_SurRef, array_to_raster
 #from grab_uncertainty import grab_uncertainty
-from atmo_solver import solving_atmo_paras
+from atmo_solver_test import solving_atmo_paras
 #from emulation_engine import AtmosphericEmulationEngine
 from psf_optimize import psf_optimize
 import warnings
@@ -275,11 +275,11 @@ class solve_aerosol(object):
                                 np.repeat(np.repeat((self.target_bands['B12'] < 1), 2, axis=0), 2, axis=1)
         water_mask           = water_mask & (b8 >= 1) & (b4 >= 1)
         self.ker_size        = int(round(max(1.96 * 29.75, 1.96 * 39)))
-        water_mask           = binary_dilation(water_mask, structure = np.ones((3,3)).astype(bool), iterations=10).astype(bool)
-        self.water_mask      = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=10).astype(bool) 
+        water_mask           = binary_dilation(water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool)
+        self.water_mask      = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool) 
         valid_data_mask      = np.all([self.target_bands[band] >= 1 for band in ['B02', 'B03', 'B04', 'B08']], axis=0)
         self.bad_pix         = binary_dilation(self.cloud | self.water_mask | (~valid_data_mask), \
-                               structure=np.ones((3,3)).astype(bool), iterations=int(self.ker_size)).astype(bool)
+                               structure=np.ones((3,3)).astype(bool), iterations= 2 * int(self.ker_size)).astype(bool)
 
     def _resample_angles_and_elevation(self):
 
@@ -302,7 +302,7 @@ class solve_aerosol(object):
         ele_data = ret[1]
         mask     = ~np.isfinite(ele_data)
         self.ele = np.ma.array(ele_data, mask = mask) / 1000.
-        self.raa = self.saa[None, ...] - self.vaa
+        self.raa = abs(self.saa[None, ...] - self.vaa)
 
     def _get_boa(self, s2):
 
@@ -346,7 +346,7 @@ class solve_aerosol(object):
         boa_mask = np.all(~self.s2_boa.mask,    axis = 0) &\
                    np.all(self.s2_boa >= 0.001, axis = 0) &\
                    np.all(self.s2_boa < 1,      axis = 0)
-        toa_mask = np.all(self.s2_toa >= 0.0001,axis = 0)
+        toa_mask = ~self.bad_pix[self.Hx, self.Hy]
         self.s2_mask    = boa_mask & qua_mask & toa_mask
         self.Hx         = self.Hx          [self.s2_mask]
         self.Hy         = self.Hy          [self.s2_mask]
@@ -358,9 +358,9 @@ class solve_aerosol(object):
         tempm1[self.Hx, self.Hy] = 1
         tempm1 = tempm1.reshape(self.num_blocks, self.block_size, \
                                 self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        tempm2 = (~self.bad_pix).reshape(self.num_blocks, self.block_size, \
-                                         self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        self.mask  = (tempm1 > 0.) & (tempm2 > 0.)
+        #tempm2 = (~self.bad_pix).reshape(self.num_blocks, self.block_size, \
+        #                                 self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
+        self.mask  = (tempm1 > 0.3) # & (tempm2 > 0.)
         #self.bp = 1 # boarder pixels
         #self.mask[:self.bp,  :] = False  
         #self.mask[:, -self.bp:] = False  
@@ -407,7 +407,7 @@ class solve_aerosol(object):
         self.logger.info('Mean values from ECMWF forcasts are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
         self.aot_unc    = np.ones(self.aot.shape)  * 0.5
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.1
-        self.tco3_unc   = np.ones(self.tco3.shape) * 0.1
+        self.tco3_unc   = np.ones(self.tco3.shape) * 0.05
         
         self.logger.info('Trying to get the tcwv from the emulation of sen2cor look up table.')
         self._get_tcwv() 
@@ -448,7 +448,7 @@ class solve_aerosol(object):
                                            self.band_indexs,
                                            self.boa_bands,
                                            gamma = 10.)
-            solved = self.aero._optimization()
+            solved = self.aero._multi_grid_solver()
             return solved
 
     def _read_cams(self, example_file, parameters = ['aod550', 'tcwv', 'gtco3']):
@@ -500,23 +500,26 @@ class solve_aerosol(object):
         ret             = self._s2_aerosol()
         self.solved     = ret[0].reshape(3, self.num_blocks, self.num_blocks)
         self.unc        = ret[1].reshape(3, self.num_blocks, self.num_blocks)
-        self.bp = 1 # boarder pixels
-        self.mask[:self.bp,  :] = False  
-        self.mask[:, -self.bp:] = False  
-        self.mask[:,  :self.bp] = False  
-        self.mask[-self.bp:, :] = False 
-        self.unc[0, :self.bp,  :] = self.unc[0].max()
-        self.unc[1, :self.bp,  :] = self.unc[1].max()
-        self.unc[2, :self.bp,  :] = self.unc[2].max()
-        self.unc[0, :, -self.bp:] = self.unc[0].max()
-        self.unc[1, :, -self.bp:] = self.unc[1].max()
-        self.unc[2, :, -self.bp:] = self.unc[2].max()
-        self.unc[0, -self.bp:, :] = self.unc[0].max()
-        self.unc[1, -self.bp:, :] = self.unc[1].max()
-        self.unc[2, -self.bp:, :] = self.unc[2].max()
-        self.unc[0, :,  :self.bp] = self.unc[0].max()
-        self.unc[1, :,  :self.bp] = self.unc[1].max()
-        self.unc[2, :,  :self.bp] = self.unc[2].max()
+        #self.bp = 1 # boarder pixels
+        #self.mask[:self.bp,  :] = False  
+        #self.mask[:, -self.bp:] = False  
+        #self.mask[:,  :self.bp] = False  
+        #self.mask[-self.bp:, :] = False 
+        #self.unc[0,    self.mask] = self.unc[0].max()
+        #self.unc[1,    self.mask] = self.unc[1].max()
+        #self.unc[2,    self.mask] = self.unc[2].max() 
+        #self.unc[0, :self.bp,  :] = self.unc[0].max()
+        #self.unc[1, :self.bp,  :] = self.unc[1].max()
+        #self.unc[2, :self.bp,  :] = self.unc[2].max()
+        #self.unc[0, :, -self.bp:] = self.unc[0].max()
+        #self.unc[1, :, -self.bp:] = self.unc[1].max()
+        #self.unc[2, :, -self.bp:] = self.unc[2].max()
+        #self.unc[0, -self.bp:, :] = self.unc[0].max()
+        #self.unc[1, -self.bp:, :] = self.unc[1].max()
+        #self.unc[2, -self.bp:, :] = self.unc[2].max()
+        #self.unc[0, :,  :self.bp] = self.unc[0].max()
+        #self.unc[1, :,  :self.bp] = self.unc[1].max()
+        #self.unc[2, :,  :self.bp] = self.unc[2].max()
 
         self.logger.info('Finished retrieval and saving them into local files.')
         self._example_g = gdal.Open(self.s2_file_dir+'/B04.jp2')
@@ -529,13 +532,13 @@ class solve_aerosol(object):
 
     def _save_posterior(self, name_array):
         name, array = name_array
-        if (self.mask.sum() > 0) & ('unc' not in name):
-            array = griddata(np.array(np.where(self.mask)).T, array[self.mask], \
-                                     (np.repeat(range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks), \
-                                      np.tile  (range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks)), method='nearest')
-            land = (~self.water_mask).reshape(self.num_blocks, self.block_size, \
-                                              self.num_blocks, self.block_size).astype(int).sum(axis=(3,1)) > 0.
-            array[~land] = np.mean(array[~land])
+        #if (self.mask.sum() > 0) & ('unc' not in name):
+            #array = griddata(np.array(np.where(self.mask)).T, array[self.mask], \
+            #                         (np.repeat(range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks), \
+            #                          np.tile  (range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks)), method='nearest')
+            #land = (~self.water_mask).reshape(self.num_blocks, self.block_size, \
+            #                                  self.num_blocks, self.block_size).astype(int).sum(axis=(3,1)) > 0.
+            #array[~land] = np.mean(array[~land])
             
         xmin, ymax  = self._example_g.GetGeoTransform()[0], \
                       self._example_g.GetGeoTransform()[3]
@@ -556,6 +559,6 @@ class solve_aerosol(object):
 
 if __name__ == "__main__":
     #33TUL on 2017-05-14.
-    aero = solve_aerosol( 2016, 11, 16, mcd43_dir = '/data/nemesis/MCD43/', s2_toa_dir = '/data/nemesis/S2_data/',\
-                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='50SLG', s2_psf=None)
+    aero = solve_aerosol( 2017, 9, 12, mcd43_dir = '/data/nemesis/MCD43/', s2_toa_dir = '/data/nemesis/S2_data/',\
+                                      emus_dir = '/home/ucfafyi/DATA/Multiply/emus/', s2_tile='50SMG', s2_psf=None)
     aero.solving_s2_aerosol()
