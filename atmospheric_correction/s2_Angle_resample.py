@@ -152,7 +152,7 @@ def get_angle(band, s2_file_dir, vaa, vza, band_dict):
                 vzmax, vzmin  = np.nanmax(vz1), np.nanmin(vz1) 
                 if not (p1==p2).all():
                     foot1[x[y <= p(x)], y[y <= p(x)]] = False
-                    if np.where(va1 == vamin)[1][0] >= np.where(va1 == vamax)[1][0]:
+                    if np.where(va1 == vamin)[1][0] <= np.where(va1 == vamax)[1][0]:
                         tmp1 = vamin.copy() 
                         vamin = vamax
                         vamax = tmp1

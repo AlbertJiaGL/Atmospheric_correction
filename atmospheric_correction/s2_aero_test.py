@@ -169,6 +169,8 @@ class solve_aerosol(object):
             psf         = psf_optimize(high_img, high_indexs, low_img, qa, cloud, 0.1, xstd = xstd, ystd = ystd)
             xs, ys      = psf.fire_shift_optimize()
             ang         = 0
+            if (xs > 50) | (xs < -50) |  (ys > 50) | (ys < -50):
+                xs, ys = 0, 0
             self.logger.info('Solved PSF parameters are: %.02f, %.02f, %d, %d, %d, and the correlation is: %.03f.' \
                               %(xstd, ystd, 0, xs, ys, 1-psf.costs.min()))
         shifted_mask = np.logical_and.reduce(((self.Hx+int(xs)>=0),
@@ -274,12 +276,12 @@ class solve_aerosol(object):
         water_mask           = ((ndvi < 0.01) & (b8 < 1100)) | ((ndvi < 0.1) & (b8 < 500)) | \
                                 np.repeat(np.repeat((self.target_bands['B12'] < 1), 2, axis=0), 2, axis=1)
         water_mask           = water_mask & (b8 >= 1) & (b4 >= 1)
-        self.ker_size        = int(round(max(1.96 * 29.75, 1.96 * 39)))
+        self.ker_size        = int(round(max(3 * 29.75, 3 * 39)))
         water_mask           = binary_dilation(water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool)
         self.water_mask      = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool) 
         valid_data_mask      = np.all([self.target_bands[band] >= 1 for band in ['B02', 'B03', 'B04', 'B08']], axis=0)
         self.bad_pix         = binary_dilation(self.cloud | self.water_mask | (~valid_data_mask), \
-                               structure=np.ones((3,3)).astype(bool), iterations= 2 * int(self.ker_size)).astype(bool)
+                               structure=np.ones((3,3)).astype(bool), iterations= self.ker_size).astype(bool)
 
     def _resample_angles_and_elevation(self):
 

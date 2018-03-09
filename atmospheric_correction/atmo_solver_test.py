@@ -67,7 +67,7 @@ class solving_atmo_paras(object):
         self.vaa             = np.cos(vaa*np.pi/180.)
         if self.sza.ndim == 3:
             self.sza, self.saa = self.sza[0], self.saa[0]
-        self.raa             = abs(np.cos((self.saa - self.vaa)*np.pi/180.))
+        self.raa             = np.cos((self.saa - self.vaa)*np.pi/180.)
         self.aot_prior       = aot_prior
         self.tcwv_prior      = tcwv_prior
         self.tco3_prior      = tco3_prior
@@ -127,7 +127,7 @@ class solving_atmo_paras(object):
         level_y = math.log(by, 2)
         level   = int(min(level_x, level_y))
         scale_factors = 1. / 2**np.arange(level)[::-1]
-        shapes        = (np.array([bx, by])[..., None] * scale_factors).astype(int).T[3:]
+        shapes        = (np.array([bx, by])[..., None] * scale_factors).astype(int).T
 
         self.xap_emus    = self.emus[0][self.band_indexs]
         self.xbp_emus    = self.emus[1][self.band_indexs]
@@ -307,9 +307,9 @@ class solving_atmo_paras(object):
             return J, J_
 
     def _cost(self, p):
-        print('---------------------------------------------------------------------------------------------------------')
-        means = tuple(np.array(p).reshape(2, -1)[:, self._coarse_mask.ravel()].mean(axis=-1)) + (self.tco3_prior.mean(),)
-        self.logger.info('Means:    %-12.03f  %-12.03f  %-12.03f'%means)
+        #print('---------------------------------------------------------------------------------------------------------')
+        #means = tuple(np.array(p).reshape(2, -1)[:, self._coarse_mask.ravel()].mean(axis=-1)) + (self.tco3_prior.mean(),)
+        #self.logger.info('Means:    %-12.03f  %-12.03f  %-12.03f'%means)
 
         obs_J, obs_J_       = self._obs_cost_test(p)
         prior_J, prior_J_   = self._prior_cost(p)
@@ -317,13 +317,13 @@ class solving_atmo_paras(object):
         J  = np.nansum(obs_J/self.b_m_pixs + prior_J + smooth_J)
         J_ = (obs_J_/self.b_m_pixs +  prior_J_ + smooth_J_).ravel()
 
-        costs    = (np.nansum(obs_J/self.b_m_pixs), np.nansum(prior_J), np.nansum(smooth_J))
-        J_primes = tuple(((obs_J_/self.b_m_pixs)[:,self._coarse_mask.ravel()] + \
-                      prior_J_[:, self._coarse_mask.ravel()] + \
-                      smooth_J_[:, self._coarse_mask.ravel()]).sum(axis=1)) + (0.,)
-        self.logger.info('costs:    %-12.03f  %-12.03f  %-12.03f'%costs)
-        self.logger.info('J_primes: %-12.03f  %-12.03f  %-12.03f'%J_primes)
-        print('---------------------------------------------------------------------------------------------------------')
+        #costs    = (np.nansum(obs_J/self.b_m_pixs), np.nansum(prior_J), np.nansum(smooth_J))
+        #J_primes = tuple(((obs_J_/self.b_m_pixs)[:,self._coarse_mask.ravel()] + \
+        #              prior_J_[:, self._coarse_mask.ravel()] + \
+        #              smooth_J_[:, self._coarse_mask.ravel()]).sum(axis=1)) + (0.,)
+        #self.logger.info('costs:    %-12.03f  %-12.03f  %-12.03f'%costs)
+        #self.logger.info('J_primes: %-12.03f  %-12.03f  %-12.03f'%J_primes)
+        #print('---------------------------------------------------------------------------------------------------------')
 
         return J, J_
 
