@@ -4,7 +4,7 @@ import sys
 import argparse
 from glob import glob
 import numpy as np
-from s2_aero_test import solve_aerosol
+from s2_aero import solve_aerosol
 from s2_correction import atmospheric_correction
 from downloaders import *
 root = os.getcwd()

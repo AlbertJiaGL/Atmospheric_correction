@@ -12,6 +12,7 @@ task*
 *.hdf
 *.pkl
 *.out
+*test*
 *.temp
 *.ipynb
 *.swp

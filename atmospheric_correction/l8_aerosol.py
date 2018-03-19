@@ -20,8 +20,9 @@ from multi_process import parmap
 from scipy.ndimage import binary_dilation, binary_erosion
 from reproject import reproject_data
 from scipy.interpolate import griddata
+from scipy.fftpack import dct, idct
 from grab_brdf import MCD43_SurRef
-from atmo_solver_new import solving_atmo_paras
+from atmo_solver import solving_atmo_paras
 from psf_optimize import psf_optimize
 import warnings
 warnings.filterwarnings("ignore")
@@ -36,7 +37,7 @@ class solve_aerosol(object):
                  year,
                  month,
                  day,
-                 emus_dir    = '/home/ucfafyi/DATA/Multiply/emus/',
+                 emus_dir    = './emus/',
                  mcd43_dir   = '/data/selene/ucfajlg/Ujia/MCD43/',
                  l8_toa_dir  = '/home/ucfafyi/DATA/S2_MODIS/l_data/',
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
@@ -45,7 +46,7 @@ class solve_aerosol(object):
                  myd08_dir   = '/home/ucfafyi/DATA/Multiply/myd08/',                 
                  l8_tile     = (123, 34),
                  l8_psf      = None,
-                 qa_thresh   = 255,
+                 qa_thresh   = 0.099,
                  aero_res    = 1000, # resolution for aerosol retrival in meters should be larger than 500
                  ):
 
@@ -72,9 +73,9 @@ class solve_aerosol(object):
         self.spectral_transform = [[1.0425211806,      1.03763437575,     1.02046102587,     0.999167480738,  1.00072211685,    0.955317665361  ], 
                                    [0.000960797104206, -0.00263498369438, -0.00179952807464, 0.0018999624331, -0.0072213121738, 0.00782954328347]] 
     def _load_xa_xb_xc_emus(self,):
-        xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xap.pkl'%(self.sensor))[0]
-        xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xbp.pkl'%(self.sensor))[0]
-        xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xcp.pkl'%(self.sensor))[0]
+        xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xap.pkl'%(self.sensor))[0]
+        xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xbp.pkl'%(self.sensor))[0]
+        xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xcp.pkl'%(self.sensor))[0]
         #f = lambda em: pkl.load(open(em, 'rb'))
         if sys.version_info >= (3,0):
             f = lambda em: pkl.load(open(em, 'rb'), encoding = 'latin1')
@@ -136,14 +137,25 @@ class solve_aerosol(object):
         return mod08_aot, myd08_aot
 
     def _get_psf(self,):
-        self.logger.info('No PSF parameters specified, start solving.')
-        xstd, ystd  = 12., 20.
-        psf         = psf_optimize(self.toa[-1].data, [self.Hx, self.Hy], np.ma.array(self.boa[-1]), self.boa_qa[-1], self.ecloud, 0.1, xstd=xstd, ystd= ystd)
-        xs, ys      = psf.fire_shift_optimize()
-        ang         = 0
-        self.logger.info('Solved PSF parameters are: %.02f, %.02f, %d, %d, %d, and the correlation is: %f.' \
-                          %(xstd, ystd, 0, xs, ys, 1-psf.costs.min()))
-        return xstd, ystd, ang, xs, ys
+        if self.l8_psf is not None:
+            xstd, ystd, ang, xs, ys = self.l8_psf
+        else:
+            self.logger.info('No PSF parameters specified, start solving.')
+            xstd, ystd  = 12., 20.
+            psf         = psf_optimize(self.toa[-1].data, [self.Hx, self.Hy], np.ma.array(self.boa[-1]), self.boa_qa[-1], self.bad_pix, 0.1, xstd=xstd, ystd= ystd)
+            xs, ys      = psf.fire_shift_optimize()
+            ang         = 0
+            self.logger.info('Solved PSF parameters are: %.02f, %.02f, %d, %d, %d, and the correlation is: %.03f.' \
+                              %(xstd, ystd, 0, xs, ys, 1-psf.costs.min()))
+
+        shifted_mask = np.logical_and.reduce(((self.Hx+int(xs)>=0),
+                                              (self.Hx+int(xs)<self.full_res[0]),
+                                              (self.Hy+int(ys)>=0),
+                                              (self.Hy+int(ys)<self.full_res[1])))
+                               
+        self.Hx, self.Hy = self.Hx[shifted_mask]+int(xs), self.Hy[shifted_mask]+int(ys)
+        self.boa      = self.boa   [:, shifted_mask]
+        self.boa_qa   = self.boa_qa[:, shifted_mask]
 
     def _extend_vals(self, val):
         if val.ndim == 2:
@@ -158,157 +170,225 @@ class solve_aerosol(object):
             raise IOError('Only two and three dimensions array is supported.')
         return temp
 
-    def _l8_aerosol(self,):
-        self.logger.propagate = False
-        self.logger.info('Start to retrieve atmospheric parameters.')
-        l8             = read_l8(self.l8_toa_dir, self.l8_tile, self.year, self.month, self.day, bands = self.bands)
-        self.l8_header = l8.header
-        self.logger.info('Loading emulators.')
-        self._load_xa_xb_xc_emus()
-        self.logger.info('Find corresponding pixels between L8 and MODIS tiles')
-        self.example_file = glob(self.l8_toa_dir + '/%s_[b, B]%d.[t, T][i, I][f, F]'%(l8.header, 1))[0]
-        if len(glob(self.l8_toa_dir + '/MCD43_%s.npz'%(l8.header))) == 0:
-            boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, self.example_file, \
-                                                           self.year, self.doy, [l8.saa_sza, l8.vaa_vza], 
-                                                           sun_view_ang_scale=[0.01, 0.01], bands = [3,4,1,2,6,7], tolz=0.003)
-            np.savez(self.l8_toa_dir + '/MCD43_%s.npz'%l8.header, boa=boa, unc=unc, hx=hx, hy=hy, lx=lx, ly=ly, flist=flist) 
-        else:
-            f = np.load(self.l8_toa_dir + '/MCD43_%s.npz'%l8.header, encoding='latin1')
-            boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist']
-        self.Hx, self.Hy = hx, hy
-        self.logger.info('Applying spectral transform.')
-        self.boa_qa = np.ma.array(unc)
-        self.boa    = np.ma.array(boa)*np.array(self.spectral_transform)[0][...,None] + \
-                                       np.array(self.spectral_transform)[1][...,None]
-        self.logger.info('Reading in TOA reflectance.')
-        self.sen_time = l8.sen_time
-
+    def _mask_bad_pix(self, l8):
         self.cloud    = l8._get_qa()
+        ndvi          = (self.toa[3] - self.toa[2])/(1. * self.toa[3] + self.toa[2])
+        water_mask    =  ((ndvi < 0.01) & (self.toa[3] < 0.11)) | ((ndvi < 0.1) & (self.toa[3] < 0.05)) | (self.toa[-1] < 0.0001)
         self.full_res = self.cloud.shape
-        self.ecloud   = binary_erosion(self.cloud, structure=np.ones((3,3)).astype(bool), iterations=10).astype(bool)
         border_mask   = np.zeros(self.full_res).astype(bool)
         border_mask[[0, -1], :] = True
         border_mask[:, [0, -1]] = True
         xstd, ystd    = 12., 20.
         ker_size      = 2*int(round(max(1.96*xstd, 1.96*ystd)))
-        self.dcloud   = binary_dilation(self.ecloud | border_mask, structure=np.ones((3,3)).astype(bool), iterations=int(ker_size/2+10)).astype(bool)
-
-        self.logger.info('Getting elevation.')
-        ele_data = reproject_data(self.global_dem, self.example_file, outputType = gdal.GDT_Float32).data/1000.
-        mask     = ~np.isfinite(ele_data)
-        self.ele = np.ma.array(ele_data, mask = mask)
-        self.ele[mask] = np.nan
-
-        self.logger.info('Getting pripors from ECMWF forcasts.')
-        self.aot, self.tcwv, self.tco3    = np.array(self._read_cams(self.example_file))
-        self.logger.info('Mean values of priors are: %.03f, %.03f, %.03f'%\
-                         (np.nanmean(self.aot), np.nanmean(self.tcwv), np.nanmean(self.tco3)))
-        self.toa        = l8._get_toa()
-        self.saa, self.sza, self.vaa, self.vza = l8._get_angles()
-        self.saa[self.saa.mask] = self.sza[self.sza.mask] = \
-        self.vaa[self.vaa.mask] = self.vza[self.vza.mask] = np.nan
-        self.logger.info('Getting DDV aot prior')
-        #self._get_ddv_aot(self.toa, l8, self.tcwv, self.tco3, ele_data)
-        self.logger.info('Sorting data.')
+        ewater_mask   = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool) 
+        ecloud        = binary_erosion (self.cloud, structure = np.ones((3,3)).astype(bool), iterations=10).astype(bool)
+        self.bad_pix  = binary_dilation(ecloud | border_mask | ewater_mask, structure = np.ones((3,3) ).astype(bool), \
+                        iterations=int(ker_size/2+10)).astype(bool)
+    
+    def __sorting_data(self,):
         self.block_size = int(np.ceil(1. * self.aero_res / 30.))
         self.num_blocks = int(np.ceil(max(self.full_res) / (1. * self.block_size)))
         self.efull_res  = self.block_size * self.num_blocks
-        shape1    =                    (self.num_blocks, self.block_size, self.num_blocks, self.block_size)
-        shape2    = (self.vza.shape[0], self.num_blocks, self.block_size, self.num_blocks, self.block_size) 
-        self.ele  = np.nanmean(self._extend_vals(self.ele ).reshape(shape1), axis=(3,1))
-        self.aot  = np.nanmean(self._extend_vals(self.aot ).reshape(shape1), axis=(3,1))
-        self.tcwv = np.nanmean(self._extend_vals(self.tcwv).reshape(shape1), axis=(3,1))
-        self.tco3 = np.nanmean(self._extend_vals(self.tco3).reshape(shape1), axis=(3,1))
-        self.saa  = np.nanmean(self._extend_vals(self.saa ).reshape(shape1), axis=(3,1))
-        self.sza  = np.nanmean(self._extend_vals(self.sza ).reshape(shape1), axis=(3,1))
-        self.vaa  = np.nanmean(self._extend_vals(self.vaa ).reshape(shape2), axis=(4,2))
-        self.vza  = np.nanmean(self._extend_vals(self.vza ).reshape(shape2), axis=(4,2))
-        self.aot_unc    = np.ones(self.aot.shape)  * 0.8
-        self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.2
-        self.tco3_unc   = np.ones(self.tco3.shape) * 0.2
-        #mod08_aot, myd08_aot = self._mcd08_aot()
-        #self.logger.info('Mean values for priors are: %.02f, %.02f, %.02f and mod08 and myd08 aot are: %.02f, %.02f'%\
-        #                 (np.nanmean(self.aot), np.nanmean(self.tcwv), np.nanmean(self.tco3), mod08_aot, myd08_aot))
-        #if np.isnan(mod08_aot):
+        shape1          =                    (self.num_blocks, self.block_size, self.num_blocks, self.block_size)
+        shape2          = (self.vza.shape[0], self.num_blocks, self.block_size, self.num_blocks, self.block_size)
+        self.ele        = np.nanmean(self._extend_vals(self.ele ).reshape(shape1), axis=(3,1))
+        self.aot        = np.nanmean(self._extend_vals(self.aot ).reshape(shape1), axis=(3,1))
+        self.tcwv       = np.nanmean(self._extend_vals(self.tcwv).reshape(shape1), axis=(3,1))
+        self.tco3       = np.nanmean(self._extend_vals(self.tco3).reshape(shape1), axis=(3,1))
+        self.saa        = np.nanmean(self._extend_vals(self.saa ).reshape(shape1), axis=(3,1))
+        self.sza        = np.nanmean(self._extend_vals(self.sza ).reshape(shape1), axis=(3,1))
+        self.vaa        = np.nanmean(self._extend_vals(self.vaa ).reshape(shape2), axis=(4,2))
+        self.vza        = np.nanmean(self._extend_vals(self.vza ).reshape(shape2), axis=(4,2))
+        self.aot_unc    = np.ones(self.aot.shape)  * 0.4
+        self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.1
+        self.tco3_unc   = np.ones(self.tco3.shape) * 0.05
         self.aot[:]    = np.nanmean(self.aot)
-        #else:
-        #    temp        = np.zeros_like(self.aot)
-        #    temp[:]     = mod08_aot
-        #    self.aot    = temp
-        self.logger.info('Applying PSF model.')
-        if self.l8_psf is None:
-            xstd, ystd, ang, xs, ys = self._get_psf()
-        else:
-            xstd, ystd, ang, xs, ys = self.l8_psf
 
-        shifted_mask = np.logical_and.reduce(((self.Hx+int(xs)>=0),
-                                              (self.Hx+int(xs)<self.full_res[0]),
-                                              (self.Hy+int(ys)>=0),
-                                              (self.Hy+int(ys)<self.full_res[1])))
+    def _get_boa(self,l8):
+        if len(glob(self.l8_toa_dir + '/MCD43_%s.npz'%(l8.header))) == 0:
+            boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, \
+                                                           self.example_file, \
+                                                           self.year, \
+                                                           self.doy, \
+                                                           [l8.saa_sza, l8.vaa_vza], \
+                                                           sun_view_ang_scale = [0.01, 0.01], \
+                                                           bands = [3,4,1,2,6,7], tolz=0.003)
+            np.savez(self.l8_toa_dir + '/MCD43_%s.npz'%l8.header, boa = boa, \
+                     unc = unc, hx = hx, hy = hy, lx = lx, ly = ly, flist = flist) 
+        else:           
+            f = np.load(self.l8_toa_dir + '/MCD43_%s.npz'%l8.header, encoding='latin1')
+            boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist']
 
-        self.Hx, self.Hy = self.Hx[shifted_mask]+int(xs), self.Hy[shifted_mask]+int(ys)
-        self.boa      = self.boa   [:, shifted_mask]
-        self.boa_qa   = self.boa_qa[:, shifted_mask]
+        return boa, unc, hx, hy, lx, ly, flist
 
-        self.logger.info('Getting the convolved TOA reflectance.')
-        self.bad_pixs = self.dcloud[self.Hx, self.Hy]
-        ker           = self.gaussian(xstd, ystd, ang)
-        f             = lambda img: signal.fftconvolve(img, ker, mode='same')[self.Hx, self.Hy]
-        self.toa      = np.array(parmap(f, list(self.toa)))
+    def _resample_angles_and_elevation(self, l8):
+        #self.block_size = int(np.ceil(1. * self.aero_res / 30.))
+        self.num_blocks = int(np.ceil(max(self.full_res) * 30 / (1. * self.aero_res)))
+        self.efull_res  = int(self.aero_res * self.num_blocks / 30.)
+        f        = lambda fname: reproject_data(fname, \
+                                                self.example_file, \
+                                                xRes=self.aero_res, \
+                                                yRes=self.aero_res, \
+                                                xSize=self.num_blocks, \
+                                                ySize=self.num_blocks, \
+                                                srcNodata = [-32768, 0],\
+                                                outputType= gdal.GDT_Float32, \
+                                                resample = gdal.GRIORA_NearestNeighbour).data / 100.
+        
+        ret      = np.array(parmap(f, l8.vaa_vza))
+        self.vaa, self.vza = ret[:, 0], ret[:, 1]
+        self.vaa[self.vaa<-180] = np.nan
+        self.vza[self.vza<=0]   = np.nan 
+        
+        #fnames   = l8.saa_sza + [self.global_dem, ]
+        #ret      = parmap(f, fnames)
+        self.saa, self.sza = f(l8.saa_sza)
+        self.saa[self.saa<-180] = np.nan
+        self.sza[self.sza<=0]   = np.nan 
 
+        f        = lambda fname: reproject_data(fname, \
+                                                self.example_file, \
+                                                xRes=self.aero_res, \
+                                                yRes=self.aero_res, \
+                                                xSize=self.num_blocks, \
+                                                ySize=self.num_blocks, \
+                                                srcNodata = [-32768,0],\
+                                                outputType= gdal.GDT_Float32,\
+                                                resample = gdal.GRIORA_Bilinear).data
+        self.ele = f(self.global_dem) / 1000.
+
+        #self.ele = ret[1] / 1000.
+
+    def _sorting_data(self,):
+        self.vaa = np.array(parmap(self._fill_nan, list(self.vaa))) 
+        self.vza = np.array(parmap(self._fill_nan, list(self.vza)))
+        self.saa, self.sza, self.ele, self.aot, self.tcwv, self.tco3 = \
+        parmap(self._fill_nan, [self.saa, self.sza, self.ele, self.aot, self.tcwv, self.tco3])
+        self.aot_unc    = np.ones(self.aot.shape)  * 0.4
+        self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.1
+        self.tco3_unc   = np.ones(self.tco3.shape) * 0.05
+        self.aot[:]    = np.nanmean(self.aot)
+       
+    def _fill_nan(self, array):
+        x_shp, y_shp = array.shape
+        mask  = ~np.isnan(array)   
+        valid = np.array(np.where(mask)).T
+        value = array[mask]
+        mesh  = np.repeat(range(x_shp), y_shp).reshape(x_shp, y_shp), \
+                np.tile  (range(y_shp), x_shp).reshape(x_shp, y_shp)
+        array = griddata(valid, value, mesh, method='nearest')
+        return array
+
+    def _get_convolved_toa(self,):
+        self.bad_pixs = self.bad_pix[self.Hx, self.Hy]
+        xstd, ystd = 12., 20.
+        x_shp, y_shp = self.toa[0].shape
+        xgaus  = np.exp(-2.*(np.pi**2)*(xstd**2)*((0.5 * np.arange(x_shp) / x_shp)**2))
+        ygaus  = np.exp(-2.*(np.pi**2)*(ystd**2)*((0.5 * np.arange(y_shp) / y_shp)**2))
+        gaus_2d = np.outer(xgaus, ygaus)
+        f   = lambda img: idct(idct(dct(dct(img, axis=0, norm = 'ortho'), axis=1, norm='ortho') * gaus_2d, \
+                                            axis=1, norm='ortho'), axis=0, norm='ortho')[self.Hx, self.Hy]
+        self.toa  = np.array(parmap(f, list(self.toa))) 
+
+    def _get_valid_pixels(self,):
         qua_mask = np.all(self.boa_qa <= self.qa_thresh, axis = 0)
         boa_mask = np.all(~self.boa.mask,axis = 0 ) &\
                           np.all(self.boa >= 0.001, axis = 0) &\
                           np.all(self.boa < 1, axis = 0)
-        toa_mask =       (~self.bad_pixs) &\
-                          np.all(self.toa >= 0.0001, axis = 0) &\
-                          np.all(self.toa < 1., axis = 0)
+        toa_mask = ~self.bad_pixs
         self.l8_mask = boa_mask & toa_mask & qua_mask
         self.Hx      = self.Hx       [self.l8_mask]
         self.Hy      = self.Hy       [self.l8_mask]
         self.toa     = self.toa   [:, self.l8_mask]
         self.boa     = self.boa   [:, self.l8_mask]
         self.boa_unc = self.boa_qa[:, self.l8_mask]
-        self.logger.info('Solving...')
-        tempm = np.zeros((self.efull_res, self.efull_res))
+        tempm  = np.zeros((self.efull_res, self.efull_res))
         tempm[self.Hx, self.Hy] = 1
-        tempm = tempm.reshape(self.num_blocks, self.block_size, \
-                              self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        self.mask = np.nansum(self._extend_vals((~self.dcloud).astype(int)).reshape(shape1), axis=(3,1))
-        self.mask = ((self.mask/((1.*self.block_size)**2)) > 0.) & ((tempm/((self.aero_res/500.)**2)) > 0.) & \
-                     (np.any(~np.isnan([self.aot, self.tcwv, self.tco3, self.sza]), axis = 0))
-        self.mask = binary_erosion(self.mask, structure=np.ones((5, 5)).astype(bool))
-        self.tcwv[~self.mask] = np.nanmean(self.tcwv)
-        self.tco3[~self.mask] = np.nanmean(self.tco3)
+        #tempm = tempm.reshape(self.num_blocks, self.block_size, \
+        #                      self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
+        self.mask = tempm > 0 
+       
+
+    def _l8_aerosol(self,):
+        self.logger.propagate = False
+        self.logger.info('Start to retrieve atmospheric parameters.')
+        l8             = read_l8(self.l8_toa_dir, self.l8_tile, self.year, self.month, self.day, bands = self.bands)
+        self.l8_header = l8.header
+        self.example_file = glob(self.l8_toa_dir + '/%s_[b, B]%d.[t, T][i, I][f, F]'%(l8.header, 1))[0]
+
+        self.logger.info('Reading in TOA reflectance.')
+        self.sen_time = l8.sen_time
+        self.toa      = l8._get_toa()
+
+        self.logger.info('Loading emulators.')
+        self._load_xa_xb_xc_emus()
+
+        self.logger.info('Getting simulated surface reflectance.')
+        boa, unc, hx, hy, lx, ly, flist = self._get_boa(l8)
+        self.Hx, self.Hy = hx, hy
+
+        self.logger.info('Update cloud mask.')
+        self._mask_bad_pix(l8)
+
+        self.logger.info('Applying spectral transform.')
+        self.boa_qa = np.ma.array(unc)
+        self.boa    = np.ma.array(boa)*np.array(self.spectral_transform)[0][...,None] + \
+                                       np.array(self.spectral_transform)[1][...,None]
+
+        self.logger.info('Getting control variables.')
+        self._resample_angles_and_elevation(l8)
+
+        self.logger.info('Getting pripors from ECMWF forcasts.')
+        self.aot, self.tcwv, self.tco3    = np.array(self._read_cams(self.example_file))
+        self.logger.info('Mean values of priors are: %.03f, %.03f, %.03f'%\
+                         (np.nanmean(self.aot), np.nanmean(self.tcwv), np.nanmean(self.tco3)))
+
+        #self.logger.info('Getting DDV aot prior')
+        #self._get_ddv_aot(self.toa, l8, self.tcwv, self.tco3, ele_data)
+        del l8
+        self.logger.info('Sorting data.')
+        self._sorting_data()
+
+        self.logger.info('Applying PSF model.')
+        self._get_psf()
+
+        self.logger.info('Getting the convolved TOA reflectance.')
+        self._get_convolved_toa()
+
+        self.logger.info('Getting valid pixels')
+        self._get_valid_pixels()
+        
+        self.logger.info('Solving...')
         self.aero = solving_atmo_paras(self.boa,
-                                  self.toa,
-                                  self.sza,
-                                  self.vza,
-                                  self.saa,
-                                  self.vaa,
-                                  self.aot,
-                                  self.tcwv,
-                                  self.tco3,
-                                  self.ele,
-                                  self.aot_unc,
-                                  self.tcwv_unc,
-                                  self.tco3_unc,
-                                  self.boa_unc,
-                                  self.Hx, self.Hy,
-                                  self.mask,
-                                  (self.efull_res, self.efull_res),
-                                  self.aero_res,
-                                  self.emus,
-                                  self.band_indexs,
-                                  self.boa_bands,
-                                  gamma = -1.4,
-                                  alpha   = 0,
-                                  pix_res = 30)
-        solved    = self.aero._optimization()
+                                       self.toa,
+                                       self.sza,
+                                       self.vza,
+                                       self.saa,
+                                       self.vaa,
+                                       self.aot,
+                                       self.tcwv,
+                                       self.tco3,
+                                       self.ele,
+                                       self.aot_unc,
+                                       self.tcwv_unc,
+                                       self.tco3_unc,
+                                       self.boa_unc,
+                                       self.Hx, self.Hy,
+                                       self.mask,
+                                       (self.efull_res, self.efull_res),
+                                       self.aero_res,
+                                       self.emus,
+                                       self.band_indexs,
+                                       self.boa_bands,
+                                       gamma = 10,
+                                       alpha   = -1.6,
+                                       pix_res = 30)
+        solved    = self.aero._multi_grid_solver()
         return solved
  
     def _get_ddv_aot(self, toa, l8, tcwv, tco3, ele_data):
-        ndvi_mask = (((toa[3] - 0.5*toa[5])/(toa[3] + 0.5*toa[5])) > 0.5) & (toa[5] > 0.01) & (toa[5] < 0.25) & (~self.dcloud)
+
+        ndvi_mask = (((toa[3] - 0.5*toa[5])/(toa[3] + 0.5*toa[5])) > 0.5) & (toa[5] > 0.01) & (toa[5] < 0.25) & (~self.bad_pix)
         if ndvi_mask.sum() < 100:
             self.logger.info('No enough DDV found in this sence for aot restieval, and only cams prediction used.') 
         else:
@@ -381,15 +461,40 @@ class solve_aerosol(object):
             offset  = sub.GetOffset()
             scale   = sub.GetScale()
             bad_pix = int(sub.GetNoDataValue())
-            rep_g   = reproject_data(g, example_file, outputType = gdal.GDT_Float32).g
+            rep_g   = reproject_data(g, example_file,
+                                     xRes=self.aero_res, \
+                                     yRes=self.aero_res, \
+                                     xSize=self.num_blocks, \
+                                     ySize=self.num_blocks, \
+                                     outputType= gdal.GDT_Float32,\
+                                     resample = gdal.GRIORA_Bilinear).g
+
             data    = rep_g.GetRasterBand(int(ind+1)).ReadAsArray()
             data    = data*scale + offset
-            mask    = (data == (bad_pix*scale + offset)) | np.isnan(data)
-            if mask.sum()>=1:
-                data[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), data[~mask])
+            #mask    = (data == (bad_pix*scale + offset)) | np.isnan(data)
+            #if mask.sum()>=1:
+            #    data[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), data[~mask])
             results.append(data*this_scale[i])
         return results
 
+    def _save_posterior(self, name_array):
+        name, array = name_array
+        xmin, ymax  = self._example_g.GetGeoTransform()[0], \
+                      self._example_g.GetGeoTransform()[3]
+        projection  = self._example_g.GetProjection()
+        xres, yres = self.aero_res, self.aero_res
+        geotransform = (xmin, xres, 0, ymax, 0, -yres)
+        nx, ny = self.num_blocks, self.num_blocks
+        outputFileName = self.l8_toa_dir + '/%s_%s.tif'%(self.l8_header, name) 
+        if os.path.exists(outputFileName):
+            os.remove(outputFileName)
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32, options=["TILED=YES", "COMPRESS=DEFLATE"])
+        dst_ds.SetGeoTransform(geotransform)   
+        dst_ds.SetProjection(projection) 
+        dst_ds.GetRasterBand(1).WriteArray(array)
+        dst_ds.FlushCache()                     
+        dst_ds = None
+        return array
         
     def solving_l8_aerosol(self,):
         self.logger = logging.getLogger('Landsat 8 Atmospheric Correction')
@@ -405,42 +510,18 @@ class solve_aerosol(object):
         self.sensor  = 'OLI'
         self.logger.info('Doing Landsat 8 tile: (%s, %s) on %d-%02d-%02d.' \
                           % (self.l8_tile[0], self.l8_tile[1], self.year, self.month, self.day))
-        #try:
-        solved      = np.array(self._l8_aerosol()[0])
-        self.solved = solved.reshape(3, self.num_blocks, self.num_blocks)
-        #except:
-         #   pass 
-            #self.solved = np.array([self.aot, self.tcwv, self.tco3])
+        ret         = np.array(self._l8_aerosol())
+        self.solved = ret[0].reshape(3, self.num_blocks, self.num_blocks)
+        self.unc    = ret[1].reshape(3, self.num_blocks, self.num_blocks)
         self.logger.info('Finished retrieval and saving them into local files.')
-        g = gdal.Open(self.example_file)
-        xmin, ymax = g.GetGeoTransform()[0], g.GetGeoTransform()[3]
-        projection = g.GetProjection()
-        para_names = 'aot', 'tcwv', 'tco3'
-        priors = [self.aot, self.tcwv, self.tco3]
-        for i,para_map in enumerate(self.solved):
-            #if self.mask.sum()>0:
-             #   g_data = griddata(np.array(np.where(self.mask)).T, para_map[self.mask], \
-             #                    (np.repeat(range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks), \
-             #                     np.tile  (range(self.num_blocks), self.num_blocks).reshape(self.num_blocks, self.num_blocks)), method='nearest')
-                #s      = smoothn(g_data.copy(), isrobust=True, verbose=False)[1]
-                #g_data = smoothn(g_data.copy(), isrobust=True, verbose=False, s=s)[0] 
-            #else:
-            #    g_data = priors[i]
-            #self.solved[i] = g_data
-            self.solved[i][~self.mask] = np.nanmean(self.solved[i][self.mask])
-            xres, yres = self.block_size * 30, self.block_size * 30
-            geotransform = (xmin, xres, 0, ymax, 0, -yres)
-            nx, ny = self.num_blocks, self.num_blocks
-            outputFileName = self.l8_toa_dir + '/%s_%s.tif'%(self.l8_header, para_names[i]) 
-            if os.path.exists(outputFileName):
-                os.remove(outputFileName)
-            dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32, options=["TILED=YES", "COMPRESS=DEFLATE"])
-            dst_ds.SetGeoTransform(geotransform)
-            dst_ds.SetProjection(projection)
-            dst_ds.GetRasterBand(1).WriteArray(self.solved[i])
-            dst_ds.FlushCache()
-            dst_ds = None
-        self.aot_map, self.tcwv_map, self.tco3_map = self.solved
+        self._example_g = gdal.Open(self.example_file)
+        para_names = 'aot', 'tcwv', 'tco3', 'aot_unc', 'tcwv_unc', 'tco3_unc'
+        arrays          = list(self.solved ) + list(self.unc)
+        name_arrays     = zip(para_names, arrays)
+        ret = parmap(self._save_posterior, name_arrays)
+        self.post_aot,     self.post_tcwv,     self.post_tco3, \
+        self.post_aot_unc, self.post_tcwv_unc, self.post_tco3_unc = ret 
+
 if __name__ == '__main__':
-    aero = solve_aerosol(2017, 7, 10, l8_tile = (123, 34), mcd43_dir   = '/data/selene/ucfajlg/Hebei/MCD43/')
+    aero = solve_aerosol(2017, 7, 10, l8_tile = (123, 34), mcd43_dir   = '/data/selene/ucfajlg/Hebei/MCD43/', l8_toa_dir = '/home/ucfafyi/DATA/S2_MODIS/l_data/LC08_L1TP_123034_20170710_20170725_01_T1')
     aero.solving_l8_aerosol()

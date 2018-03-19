@@ -77,7 +77,7 @@ def down_l8_emus(emus_dir):
     for line in req.text.split():
         if '.pkl' in line:
             fname   = line.split('"')[1].split('<')[0]
-            if 'L8' in fname:
+            if 'OLI' in fname:
                 downloader(fname, url, emus_dir)
 
 def down_cams(cams_dir, cams_file):

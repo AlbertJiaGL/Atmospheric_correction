@@ -63,8 +63,8 @@ class psf_optimize(object):
     def dct_gaussian(self, xstd, ystd, shape):
         win_x, win_y = shape
         xgaus  = np.exp(-2.*(np.pi**2)*(xstd**2)*((0.5 * np.arange(win_x) /win_x)**2))
-        ygaus  = np.exp(-2.*(np.pi**2)*(ystd**2)*((0.5 * np.arange(win_y) /win_y)**2))                                                                          
-        gaus_2d = np.outer(ygaus, xgaus)
+        ygaus  = np.exp(-2.*(np.pi**2)*(ystd**2)*((0.5 * np.arange(win_y) /win_y)**2))
+        gaus_2d = np.outer(xgaus, ygaus)
         return gaus_2d
 
     def gaussian(self, xstd, ystd, angle, norm = True):

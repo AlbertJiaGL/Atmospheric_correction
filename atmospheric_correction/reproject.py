@@ -23,6 +23,8 @@ class reproject_data(object):
                  ymax         = None,
                  xRes         = None,
                  yRes         = None,
+                 xSize        = None,
+                 ySize        = None,
                  resample     = gdal.GRIORA_Bilinear
                  ):
 
@@ -38,6 +40,8 @@ class reproject_data(object):
         self.ymax       = ymax
         self.xRes       = xRes
         self.yRes       = yRes
+        self.xSize      = xSize
+        self.ySize      = ySize
         self.resample   = resample
         if (self.target_img is None) & (self.dstSRS is None):
             raise IOError('Projection should be specified ether from a file or a projection code.')
@@ -48,14 +52,21 @@ class reproject_data(object):
                 g     = target_img
             geo_t = g.GetGeoTransform()
             x_size, y_size = g.RasterXSize, g.RasterYSize     
-            xmin, xmax = min(geo_t[0], geo_t[0] + x_size * geo_t[1]), \
-                         max(geo_t[0], geo_t[0] + x_size * geo_t[1])  
-            ymin, ymax = min(geo_t[3], geo_t[3] + y_size * geo_t[5]), \
-                         max(geo_t[3], geo_t[3] + y_size * geo_t[5])
+
             if self.xRes is None:
                 self.xRes = abs(geo_t[1])
             if self.yRes is None:
                 self.yRes = abs(geo_t[5])
+
+            if self.xSize is not None: 
+                x_size = 1. * self.xSize * self.xRes / abs(geo_t[1])
+            if self.ySize is not None: 
+                y_size = 1. * self.ySize * self.yRes / abs(geo_t[5])
+
+            xmin, xmax = min(geo_t[0], geo_t[0] + x_size * geo_t[1]), \
+                         max(geo_t[0], geo_t[0] + x_size * geo_t[1])  
+            ymin, ymax = min(geo_t[3], geo_t[3] + y_size * geo_t[5]), \
+                         max(geo_t[3], geo_t[3] + y_size * geo_t[5])
             dstSRS     = osr.SpatialReference( )
             raster_wkt = g.GetProjection()
             dstSRS.ImportFromWkt(raster_wkt)

@@ -57,9 +57,9 @@ class atmospheric_correction(object):
             self.logger.addHandler(ch)
 
     def _load_xa_xb_xc_emus(self,):
-        xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xap_%s.pkl'%(self.s2_sensor, self.satellite))[0]
-        xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xbp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
-        xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_*_xcp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
+        xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_correction_xap_%s.pkl'%(self.s2_sensor, self.satellite))[0]
+        xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_correction_xbp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
+        xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_correction_xcp_%s.pkl'%(self.s2_sensor, self.satellite))[0]
         if sys.version_info >= (3,0):
             f = lambda em: pkl.load(open(em, 'rb'), encoding = 'latin1')
         else:
