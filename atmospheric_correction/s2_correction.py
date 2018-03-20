@@ -31,7 +31,7 @@ class atmospheric_correction(object):
                  acquisition = '0',
                  s2_toa_dir  = '/home/ucfafyi/DATA/S2_MODIS/s_data/',
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
-                 emus_dir    = '/home/ucfafyi/DATA/Multiply/emus/',
+                 emus_dir    = './emus/',
                  satellite   = 'S2A',
                  reconstruct_s2_angle = True
                  ):              
@@ -156,7 +156,7 @@ class atmospheric_correction(object):
         #self.sur_refs.update(dict(zip(['B02', 'B03', 'B04', 'B08'], self.boa)))
         fnames = [i + '_sur' for i in self._10_meter_bands] + [i+'_sur_unc' for i in self._10_meter_bands]
         self._save_img(list(boa) + list(unc), fnames); del boa; del unc
-        for bands in self._10_meter_bands:
+        for band in self._10_meter_bands:
             all_refs[band] = None 
   
         self.logger.info('Doing 20 meter bands')
@@ -175,7 +175,7 @@ class atmospheric_correction(object):
         fnames = [i + '_sur' for i in self._20_meter_bands] + [i+'_sur_unc' for i in self._20_meter_bands]
         self._save_img(list(boa) + list(unc), fnames); del boa; del unc
         #self.sur_refs.update(dict(zip(['B05', 'B06', 'B07', 'B8A', 'B11', 'B12'], self.boa)))
-        for bands in self._20_meter_bands:
+        for band in self._20_meter_bands:
             all_refs[band] = None
 
         self.logger.info('Doing 60 meter bands')
@@ -194,7 +194,7 @@ class atmospheric_correction(object):
         fnames = [i + '_sur' for i in self._60_meter_bands] + [i+'_sur_unc' for i in self._60_meter_bands]
         self._save_img(list(boa) + list(unc), fnames); del boa; del unc
         #self.sur_refs.update(dict(zip(['B05', 'B06', 'B07', 'B8A', 'B11', 'B12'], self.boa)))      
-        for bands in self._60_meter_bands:
+        for band in self._60_meter_bands:
             all_refs[band] = None
 
         self.logger.info('Done!')
@@ -266,7 +266,7 @@ class atmospheric_correction(object):
     def fire_correction(self):
         rows              = np.repeat(np.arange(self._num_blocks), self._num_blocks)
         columns           = np.tile(np.arange(self._num_blocks), self._num_blocks)
-        blocks            = zip(rows, columns)
+        blocks            = list(zip(rows, columns))
         band_ram          = 2.5e10 / (60. / self._mean_size)
         av_ram = psutil.virtual_memory().available 
         procs = np.min([int(len(blocks) * (av_ram / band_ram) / self.toa.shape[0]), psutil.cpu_count(), len(blocks)])
@@ -342,12 +342,13 @@ class atmospheric_correction(object):
                             xbp_H[...,None] * xcp_H[...,None] + 1)**2
             
             aot_dH, tcwv_dH, tco3_dH = [ dH[:, :, :,i] for i in range(3)]
+            toa_dH = xap_H / (xcp_H*(toa * xap_H - xbp_H) + 1)**2
 
             aot_unc  = np.repeat(np.repeat(aot_unc,  self._mean_size, axis=0), self._mean_size, axis=1)
             tcwv_unc = np.repeat(np.repeat(tcwv_unc, self._mean_size, axis=0), self._mean_size, axis=1) 
             tco3_unc = np.repeat(np.repeat(tco3_unc, self._mean_size, axis=0), self._mean_size, axis=1)
 
-            unc = np.sqrt(aot_dH ** 2 * aot_unc + tcwv_dH ** 2 * tcwv_unc + tco3_dH ** 2 * tco3_unc) 
+            unc = np.sqrt(aot_dH ** 2 * aot_unc**2 + tcwv_dH ** 2 * tcwv_unc**2 + tco3_dH ** 2 * tco3_unc**2 + toa_dH**2 * 0.015**2) 
         else:
             boa    = toa
             unc    = np.zeros_like(toa)
@@ -358,7 +359,7 @@ class atmospheric_correction(object):
         x_size, y_size = data.shape
         x_blocks       = x_size//block_size
         y_blocks       = y_size//block_size
-        data           = data.copy().reshape(x_blocks, block_size, y_blocks, block_size)        
+        data           = data.copy().reshape(int(x_blocks), int(block_size), int(y_blocks), int(block_size))
         small_data     = np.nanmean(data, axis=(3,1))
         return small_data
 

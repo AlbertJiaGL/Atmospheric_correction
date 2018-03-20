@@ -196,7 +196,7 @@ class solving_atmo_paras(object):
             #p0 = p0 / P
             m = 100 if i < 5 else 20
             factr = 1e8
-            ftol = factr * numpy.finfo(float).eps
+            ftol = factr * np.finfo(float).eps
             psolve = optimize.minimize(self._cost, p0, jac=True, bounds = bounds, method='L-BFGS-B', options={'disp': False, 'maxcor': m, 'gtol': 1e-02, 'ftol': ftol})
             #res3 = optimize.minimize(self._cost, p0, jac=True, method='TNC', options={'disp': True})
             #res4 = optimize.minimize(self._cost, p0, jac=, method='COBYLA', options={'disp': True})

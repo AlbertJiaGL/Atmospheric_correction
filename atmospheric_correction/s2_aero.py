@@ -311,6 +311,8 @@ class solve_aerosol(object):
         self.sa_files = s2.saa_sza
         self.va_files = s2.vaa_vza[:6]
         if len(glob(self.s2_file_dir + '/MCD43.npz')) == 0:
+            self.logger.warning('Since no Low resolution processing chain produced BRDF product is available at the moment, ' + \
+                                'gap filled MCD43 is used and it may take a long time do the gap filling.')
             boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, self.example_file, \
                                                            self.year, self.doy, [self.sa_files, self.va_files],
                                                            sun_view_ang_scale=[0.01, 0.01], bands = [3,4,1,2,6,7], tolz=0.001, reproject=False)

@@ -86,7 +86,7 @@ class atmospheric_correction(object):
         self._num_blocks_x, self._num_blocks_y = int(np.ceil(1. * self.shape[0] / self._block_size)), int(np.ceil(1. * self.shape[1] / self._block_size))
         rows              = np.repeat(np.arange(self._num_blocks_x), self._num_blocks_y)
         columns           = np.tile  (np.arange(self._num_blocks_y), self._num_blocks_x)
-        blocks            = zip(rows, columns)
+        blocks            = list(zip(rows, columns))
         self.mask =  gdal.Open(glob(self.l8_toa_dir + '/%s_[b, B][q, Q][a, A].[T, t][I, i][F, f]'%l8.header)[0]).ReadAsArray() == 1
 
         self.logger.info('Doing correction.')
@@ -283,11 +283,12 @@ class atmospheric_correction(object):
                   xbp_H[...,None] * xcp_H[...,None] + 1)**2
                                                
             aot_dH, tcwv_dH, tco3_dH = [ dH[:, :, :,i] for i in range(3)]
-                                               
+            toa_dH = xap_H / (xcp_H*(toa * xap_H - xbp_H) + 1)**2                                  
+
             aot_unc  = np.repeat(np.repeat(aot_unc,  m_size, axis=0), m_size, axis=1)
             tcwv_unc = np.repeat(np.repeat(tcwv_unc, m_size, axis=0), m_size, axis=1) 
             tco3_unc = np.repeat(np.repeat(tco3_unc, m_size, axis=0), m_size, axis=1)
-            unc = np.sqrt(aot_dH ** 2 * aot_unc + tcwv_dH ** 2 * tcwv_unc + tco3_dH ** 2 * tco3_unc) 
+            unc = np.sqrt(aot_dH ** 2 * aot_unc**2 + tcwv_dH ** 2 * tcwv_unc**2 + tco3_dH ** 2 * tco3_unc**2 + toa_dH**2 * 0.015**2) 
         else:                                  
             boa    = toa                       
             unc    = np.zeros_like(toa)        

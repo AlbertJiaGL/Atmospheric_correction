@@ -19,6 +19,7 @@ task*
 *.hdf
 *.egg-info/
 *.iml
+*/util/l8_angles/l8_angles
 .ipynb_checkpoints/
 */S2_data/*
 */images/*

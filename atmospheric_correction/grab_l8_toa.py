@@ -38,7 +38,7 @@ class read_l8(object):
                  month,
                  day,
                  bands = None,
-                 angle_exe = '/home/ucfafyi/DATA/S2_MODIS/l_data/l8_angles/l8_angles'
+                 angle_exe = './util/l8_angles/l8_angles'
                 ):
         self.toa_dir   = toa_dir
         self.tile      = tile
@@ -49,7 +49,7 @@ class read_l8(object):
             self.bands = np.arange(1, 8)
         else:
             self.bands = np.array(bands)
-        self.angle_exe = angle_exe
+        self.angle_exe = os.path.abspath(angle_exe)
         composite      = glob(self.toa_dir + '/LC08_L1TP_%03d%03d_%04d%02d%02d_*_01_??_[B, b]1.[T, t][I, i][F, f]' \
                          % ( self.tile[0], self.tile[1], self.year, self.month, self.day))[0].split('/')[-1].split('_')[:-1]
         self.header    = '_'.join(composite)    
@@ -62,9 +62,13 @@ class read_l8(object):
         except:
             ang_file     = glob(self.toa_dir + '/%s_[a, A][n, N][g, G].[t, T][x, X][t, T]'%self.header)[0]
             cwd = os.getcwd()
+            if not os.path.exists(self.angle_exe):
+                os.chdir('./util/l8_angles/') 
+                subprocess.call('make') 
+            os.chdir(cwd)             
             os.chdir(self.toa_dir)
-            f            =  lambda band: subprocess.call([self.angle_exe, ang_file, \
-                                                          'BOTH', '1', '-f', '-32768', '-b', str(band)])
+            ang_file = ang_file.split('/')[-1]
+            f        =  lambda band: subprocess.call([self.angle_exe, ang_file, 'BOTH', '1', '-f', '-32768', '-b', str(band)])
             parmap(f, np.arange(1, 8))
             os.chdir(cwd)
             self.saa_sza = []

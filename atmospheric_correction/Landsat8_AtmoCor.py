@@ -18,9 +18,14 @@ parser.add_argument("--version",              action="version",                 
 args = parser.parse_args()
 
 
+
 l8_toa_dir       = '/'.join(args.l8_file.split('/')[:-1])
 header           = '_'.join(args.l8_file.split('/')[-1].split('_')[:7])
-if len(glob(l8_toa_dir + '/' + header + '_[b, B]*.[T, t][I, i][F, f]')) < 12:
+if (len(glob(l8_toa_dir + '/' + header + '_[b, B]*.[T, t][I, i][F, f]')) >= 12):
+    l8_toa_dir   =      l8_toa_dir + '/' + header + '/'
+elif (len(glob(args.l8_file + '/' + header + '_[b, B]*.[T, t][I, i][F, f]')) >= 12):
+    l8_toa_dir   = args.l8_file
+else:
     down_l8_google(header, l8_toa_dir)
     #args.l8_file = glob(l8_toa_dir + '/' + header + '/' + header + '_[b, B]1.[t, T][i, I][f, F]')[0]
     l8_toa_dir   =      l8_toa_dir + '/' + header + '/'
@@ -29,14 +34,16 @@ pr, date         = args.l8_file.split('/')[-1].split('_')[2:4]
 path, row        = int(pr[:3]), int(pr[3:])
 year, month, day = int(date[:4]), int(date[4:6]), int(date[6:8])
 
-if len(glob(args.emulator_dir + '/*OLI*L8*.pkl')) < 3:
+if len(glob(args.emulator_dir + '/*OLI*.pkl')) < 6:
     down_l8_emus(args.emulator_dir)
 cams_file = '%04d-%02d-%02d.nc'%(year, month, day)
 if len(glob(os.path.join(args.cams, cams_file))) == 0:
     down_cams(args.cams, cams_file)
 
 dem_dir = '/'.join(args.dem.split('/')[:-1])
-down_dem(dem_dir, args.l8_file)
+url_dem = down_dem(dem_dir, args.l8_file)
+if url_dem:
+    args.dem = url_dem 
 down_l8_modis(args.MCD43_file_dir, args.l8_file)
 aero = solve_aerosol(year, month, day, l8_tile = (int(path), int(row)), emus_dir = args.emulator_dir, mcd43_dir   = args.MCD43_file_dir, l8_toa_dir = l8_toa_dir, global_dem=args.dem, cams_dir=args.cams)
 aero.solving_l8_aerosol()

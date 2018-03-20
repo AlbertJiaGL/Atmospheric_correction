@@ -206,6 +206,8 @@ class solve_aerosol(object):
 
     def _get_boa(self,l8):
         if len(glob(self.l8_toa_dir + '/MCD43_%s.npz'%(l8.header))) == 0:
+            self.logger.warning('Since no Low resolution processing chain produced BRDF product is available at the moment, ' + \
+                                'gap filled MCD43 is used at the moment and it may take a long time do the gap filling.')
             boa, unc, hx, hy, lx, ly, flist = MCD43_SurRef(self.mcd43_dir, \
                                                            self.example_file, \
                                                            self.year, \

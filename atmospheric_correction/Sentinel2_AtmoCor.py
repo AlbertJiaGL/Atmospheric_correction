@@ -31,6 +31,7 @@ if not os.path.exists(file_path):
 
 with open(file_path +'/tileInfo.json', 'rb') as f:
     for line in f.readlines():
+        line = line.decode("utf-8")
         if 'productName' in line:
             args.satellite = line.split('"')[3].split('_')[0]
 
