@@ -110,65 +110,69 @@ def get_angle(band, s2_file_dir, vaa, vza, band_dict):
     vz1   = None         
     va2   = None                                                     
     vz2   = None     
-    for i in range(layer.GetFeatureCount()):
-        det = layer.GetFeature(i).items()['gml_id']
-        foot1 = gdal.Rasterize("", gml, format="MEM", xRes=xRes, yRes=yRes, where="gml_id='%s'"%det, outputBounds=[ x_min, y_min, x_max, y_max], noData=np.nan, burnValues=1).ReadAsArray()
-        key =  band_dict[det.split('-')[-3]], int(det.split('-')[-2])
-        va1 = vaa[key]       
-        vz1 = vza[key]                                                
-        if i>0:
-            overlap = foot1 * foot2
-            x,y = np.where(overlap)
-            xmin, xmax, ymin, ymax = x.min(), x.max(), y.min(),y.max()
-            ll = x[x==xmax][-1], y[x==xmax][-1]
-            lr = x[y==ymax][-1], y[y==ymax][-1]
-            ul = x[y==ymin][0], y[y==ymin][0]
-            ur = x[x==xmin][0], y[x==xmin][0]
-            p1 = np.mean([lr, ur], axis=0)
-            p2 = np.mean([ll, ul], axis=0)
-            x1,y1 = np.where(foot2)
-            vamax, vamin  = np.nanmax(va2), np.nanmin(va2)
-            vzmax, vzmin  = np.nanmax(vz2), np.nanmin(vz2)
-            if not (p1==p2).all():
-                p = np.poly1d(np.polyfit([p1[0], p2[0]],[p1[1], p2[1]],1))
-                foot2[x[y > p(x)], y[y > p(x)]] = False
-                if np.where(va2 == vamin)[1][0] <= np.where(va2 == vamax)[1][0]:
-                    tmp1 = vamin.copy()
-                    vamin = vamax 
-                    vamax = tmp1
-                if np.where(vz2 == vzmin)[1][0] <= np.where(vz2 == vzmax)[1][0]:
-                    tmp2 = vzmin.copy()
-                    vzmin = vzmax
-                    vzmax = tmp2 
-                dist = abs(p(x1)-y1)/(np.sqrt(1+p.c[0]**2))
-                vas[x1,y1] = vamin + dist/(dist.max()-dist.min()) * (vamax-vamin)
-                vzs[x1,y1] = vzmin + dist/(dist.max()-dist.min()) * (vzmax-vzmin)
-            else:
-                vas[x1,y1] = vamin
-                vzs[x1,y1] = vzmin
-            x1,y1 = np.where(foot1)
-            if i == layer.GetFeatureCount()-1:
-                vamax, vamin  = np.nanmax(va1), np.nanmin(va1)
-                vzmax, vzmin  = np.nanmax(vz1), np.nanmin(vz1) 
+    try:
+        for i in range(layer.GetFeatureCount()):
+            det = layer.GetFeature(i).items()['gml_id']
+            foot1 = gdal.Rasterize("", gml, format="MEM", xRes=xRes, yRes=yRes, where="gml_id='%s'"%det, outputBounds=[ x_min, y_min, x_max, y_max], noData=np.nan, burnValues=1).ReadAsArray()
+            key =  band_dict[det.split('-')[-3]], int(det.split('-')[-2])
+            va1 = vaa[key]       
+            vz1 = vza[key]                                                
+            if i>0:
+                overlap = foot1 * foot2
+                x,y = np.where(overlap)
+                xmin, xmax, ymin, ymax = x.min(), x.max(), y.min(),y.max()
+                ll = x[x==xmax][-1], y[x==xmax][-1]
+                lr = x[y==ymax][-1], y[y==ymax][-1]
+                ul = x[y==ymin][0], y[y==ymin][0]
+                ur = x[x==xmin][0], y[x==xmin][0]
+                p1 = np.mean([lr, ur], axis=0)
+                p2 = np.mean([ll, ul], axis=0)
+                x1,y1 = np.where(foot2)
+                vamax, vamin  = np.nanmax(va2), np.nanmin(va2)
+                vzmax, vzmin  = np.nanmax(vz2), np.nanmin(vz2)
                 if not (p1==p2).all():
-                    foot1[x[y <= p(x)], y[y <= p(x)]] = False
-                    if np.where(va1 == vamin)[1][0] <= np.where(va1 == vamax)[1][0]:
-                        tmp1 = vamin.copy() 
-                        vamin = vamax
+                    p = np.poly1d(np.polyfit([p1[0], p2[0]],[p1[1], p2[1]],1))
+                    foot2[x[y > p(x)], y[y > p(x)]] = False
+                    if np.where(va2 == vamin)[1][0] <= np.where(va2 == vamax)[1][0]:
+                        tmp1 = vamin.copy()
+                        vamin = vamax 
                         vamax = tmp1
-                    if np.where(vz1 == vzmin)[1][0] >= np.where(vz1 == vzmax)[1][0]:
-                        tmp2 = vzmin.copy()  
-                        vzmin = vzmax 
-                        vzmax = tmp2
+                    if np.where(vz2 == vzmin)[1][0] <= np.where(vz2 == vzmax)[1][0]:
+                        tmp2 = vzmin.copy()
+                        vzmin = vzmax
+                        vzmax = tmp2 
                     dist = abs(p(x1)-y1)/(np.sqrt(1+p.c[0]**2))
                     vas[x1,y1] = vamin + dist/(dist.max()-dist.min()) * (vamax-vamin)
                     vzs[x1,y1] = vzmin + dist/(dist.max()-dist.min()) * (vzmax-vzmin)
                 else:
-                    vas[x1,y1] = vamin 
-                    vas[x1,y1] = vamin 
-        foot2 = foot1
+                    vas[x1,y1] = vamin
+                    vzs[x1,y1] = vzmin
+                x1,y1 = np.where(foot1)
+                if i == layer.GetFeatureCount()-1:
+                    vamax, vamin  = np.nanmax(va1), np.nanmin(va1)
+                    vzmax, vzmin  = np.nanmax(vz1), np.nanmin(vz1) 
+                    if not (p1==p2).all():
+                        foot1[x[y <= p(x)], y[y <= p(x)]] = False
+                        if np.where(va1 == vamin)[1][0] <= np.where(va1 == vamax)[1][0]:
+                            tmp1 = vamin.copy() 
+                            vamin = vamax
+                            vamax = tmp1
+                        if np.where(vz1 == vzmin)[1][0] >= np.where(vz1 == vzmax)[1][0]:
+                            tmp2 = vzmin.copy()  
+                            vzmin = vzmax 
+                            vzmax = tmp2
+                        dist = abs(p(x1)-y1)/(np.sqrt(1+p.c[0]**2))
+                        vas[x1,y1] = vamin + dist/(dist.max()-dist.min()) * (vamax-vamin)
+                        vzs[x1,y1] = vzmin + dist/(dist.max()-dist.min()) * (vzmax-vzmin)
+                    else:
+                        vas[x1,y1] = vamin 
+                        vas[x1,y1] = vamin 
+            foot2 = foot1
         va2   = va1
         vz2   = vz1
+    except:
+        vas[:] = np.nanmean(vaa.values())
+        vzs[:] = np.nanmean(vza.values())
     outputFileName   = s2_file_dir + '/angles/VAA_VZA_%s.tif'%band         
     if os.path.exists(outputFileName):                   
         os.remove(outputFileName)                        
@@ -176,9 +180,15 @@ def get_angle(band, s2_file_dir, vaa, vza, band_dict):
     dst_ds.SetGeoTransform(g1.GetGeoTransform())         
     dst_ds.SetProjection(g1.GetProjection())             
     mask      = vas < -180
-    vas[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vas[~mask]).astype(float)
+    if (~mask).sum()>1:
+        vas[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vas[~mask]).astype(float)
+    else:
+        vas[:] = np.nanmean(va1)
     mask      = vzs < 0                              
-    vzs[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vzs[~mask]).astype(float)
+    if (~mask).sum()>1:
+        vzs[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vzs[~mask]).astype(float)
+    else:
+        vzs[:] = np.nanmean(vz1)
     vas[vas>180] = vas[vas>180] - 360                    
     dst_ds.GetRasterBand(1).WriteArray((vas * 100).astype(int))            
     dst_ds.GetRasterBand(2).WriteArray((vzs * 100).astype(int))            

@@ -47,5 +47,5 @@ if url_dem:
 down_l8_modis(args.MCD43_file_dir, args.l8_file)
 aero = solve_aerosol(year, month, day, l8_tile = (int(path), int(row)), emus_dir = args.emulator_dir, mcd43_dir   = args.MCD43_file_dir, l8_toa_dir = l8_toa_dir, global_dem=args.dem, cams_dir=args.cams)
 aero.solving_l8_aerosol()
-atmo_cor = atmospheric_correction(year, month, day, (int(path), int(row)), l8_toa_dir = l8_toa_dir, emus_dir = args.emulator_dir, global_dem=args.dem)
-atmo_cor.atmospheric_correction()
+#atmo_cor = atmospheric_correction(year, month, day, (int(path), int(row)), l8_toa_dir = l8_toa_dir, emus_dir = args.emulator_dir, global_dem=args.dem)
+#atmo_cor.atmospheric_correction()

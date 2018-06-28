@@ -507,8 +507,12 @@ def dctND(data,f=dct):
     return f(f(f(data,norm='ortho',type=2,axis=0)\
                      ,norm='ortho',type=2,axis=1)\
                      ,norm='ortho',type=2,axis=2)
-
-def peaks(n):
+  elif nd ==4:
+    return f(f(f(f(data,norm='ortho',type=2,axis=0)\
+                       ,norm='ortho',type=2,axis=1)\
+                       ,norm='ortho',type=2,axis=2)\
+                       ,norm='ortho',type=2,axis=3) 
+def peaks(n):   
   '''
   Mimic basic of matlab peaks fn
   '''

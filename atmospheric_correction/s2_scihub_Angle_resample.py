@@ -6,13 +6,14 @@ import gdal
 import psutil
 import errno 
 import numpy as np
+from glob import glob
 from multiprocessing import Pool
 import xml.etree.ElementTree as ET
 from functools import partial
-s2_file_dir = sys.argv[1]
 #s2_file_dir = '/store/S2_data/50/S/LH/2017/2/27/0/'
-def parse_xml(s2_file_dir):
-    tree = ET.parse(s2_file_dir+'/metadata.xml')
+
+def parse_xml(meta_file):
+    tree = ET.parse(meta_file)
     root = tree.getroot()
     #Sun_Angles_Grid
     saa =[]
@@ -67,17 +68,13 @@ def parse_xml(s2_file_dir):
     sza  = np.array(sza).astype(float)
     saa  = np.array(saa).astype(float)
     saa[saa>180] = saa[saa>180] - 360                 
-    g                = gdal.Open(s2_file_dir + '/B04.jp2')
+    s2_file_dir = '/'.join(meta_file.split('/')[:-1])
+    b4 = glob(s2_file_dir+'/IMG_DATA/*_B04.jp2')[0]
+    g                = gdal.Open(b4)
     geo              = g.GetGeoTransform()
     projection       = g.GetProjection()
     geotransform     = (geo[0], 5000, geo[2], geo[3], geo[4], -5000)
-    directory = s2_file_dir  + '/angles/'
-    try:        
-        os.makedirs(directory)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-    outputFileName   = s2_file_dir + '/angles/SAA_SZA.tif'
+    outputFileName   = s2_file_dir + '/ANG_DATA/SAA_SZA.tif'
     if os.path.exists(outputFileName):
         os.remove(outputFileName)
     dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, 23, 23, 2, gdal.GDT_Int16, options=["TILED=YES", "COMPRESS=DEFLATE"])
@@ -88,15 +85,16 @@ def parse_xml(s2_file_dir):
     dst_ds, g = None, None
     return vaa, vza
 
-def get_angle(band, vaa, vza, band_dict):
+def get_angle(band, s2_file_dir, vaa, vza, band_dict):
     vas = np.zeros((10980, 10980))
     vas[:] = -327.67
     vzs = np.zeros((10980, 10980))
     vzs[:] = -327.67
-    gml = s2_file_dir+'/qi/MSK_DETFOO_%s.gml'%band
+    gml = glob(s2_file_dir+'/QI_DATA/*MSK_DETFOO*%s*gml'%band)[0]
     g = ogr.Open(gml)
     xRes = 10; yRes=10
-    g1     = gdal.Open(s2_file_dir+'/B04.jp2')
+    b4 = glob(s2_file_dir+'/IMG_DATA/*_B04.jp2')[0]
+    g1     = gdal.Open(b4)
     geo_t = g1.GetGeoTransform()
     x_size, y_size = g1.RasterXSize, g1.RasterYSize
     x_min, x_max  = min(geo_t[0], geo_t[0] + x_size * geo_t[1]), \
@@ -154,7 +152,7 @@ def get_angle(band, vaa, vza, band_dict):
                     vzmax, vzmin  = np.nanmax(vz1), np.nanmin(vz1) 
                     if not (p1==p2).all():
                         foot1[x[y <= p(x)], y[y <= p(x)]] = False
-                        if np.where(va1 == vamin)[1][0] >= np.where(va1 == vamax)[1][0]:
+                        if np.where(va1 == vamin)[1][0] <= np.where(va1 == vamax)[1][0]:
                             tmp1 = vamin.copy() 
                             vamin = vamax
                             vamax = tmp1
@@ -168,22 +166,28 @@ def get_angle(band, vaa, vza, band_dict):
                     else:
                         vas[x1,y1] = vamin 
                         vas[x1,y1] = vamin 
-        foot2 = foot1
+            foot2 = foot1
         va2   = va1
         vz2   = vz1
     except:
         vas[:] = np.nanmean(vaa.values())
         vzs[:] = np.nanmean(vza.values())
-    outputFileName   = s2_file_dir + '/angles/VAA_VZA_%s.tif'%band         
+    outputFileName   = s2_file_dir + '/ANG_DATA/VAA_VZA_%s.tif'%band         
     if os.path.exists(outputFileName):                   
         os.remove(outputFileName)                        
     dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, 10980, 10980, 2, gdal.GDT_Int16, options=["TILED=YES", "COMPRESS=DEFLATE"])
     dst_ds.SetGeoTransform(g1.GetGeoTransform())         
     dst_ds.SetProjection(g1.GetProjection())             
-    mask      = vas < -180                      
-    vas[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vas[~mask]).astype(float)
+    mask      = vas < -180
+    if (~mask).sum()>1:
+        vas[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vas[~mask]).astype(float)
+    else:
+        vas[:] = np.nanmean(va1)
     mask      = vzs < 0                              
-    vzs[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vzs[~mask]).astype(float)
+    if (~mask).sum()>1:
+        vzs[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), vzs[~mask]).astype(float)
+    else:
+        vzs[:] = np.nanmean(vz1)
     vas[vas>180] = vas[vas>180] - 360                    
     dst_ds.GetRasterBand(1).WriteArray((vas * 100).astype(int))            
     dst_ds.GetRasterBand(2).WriteArray((vzs * 100).astype(int))            
@@ -194,17 +198,19 @@ def get_angle(band, vaa, vza, band_dict):
     g1 = None     
 
 def resample_s2_angles(s2_file_dir):
+    if not os.path.exists(s2_file_dir + '/ANG_DATA/'):
+        os.mkdir(s2_file_dir + '/ANG_DATA/')
     #check the available rams and decide cores can be used
     band_ram = 75000000 * 1024. / 13.
     av_ram = psutil.virtual_memory().available 
     procs = np.minimum(int(av_ram / band_ram), psutil.cpu_count())
     #start multiprocessing
-    vaa, vza = parse_xml(s2_file_dir)
+    meta_file =  [i for i in glob(s2_file_dir+ '/*.xml') if ('MTD' in i) & ('TL' in i)][0]
+    vaa, vza = parse_xml(meta_file)
     bands    = 'B01', 'B02', 'B03','B04','B05' ,'B06', 'B07', 'B08','B8A', 'B09', 'B10', 'B11', 'B12' #all bands
     band_dict = dict(zip(bands, range(13)))
-    par = partial(get_angle, vaa=vaa, vza=vza, band_dict=band_dict)
+    par = partial(get_angle, s2_file_dir=s2_file_dir, vaa=vaa, vza=vza, band_dict=band_dict)
     p = Pool(procs)
     ret = p.map(par, bands)
     p.close()
     p.join()
-resample_s2_angles(s2_file_dir)

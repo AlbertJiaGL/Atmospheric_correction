@@ -127,8 +127,8 @@ class atmospheric_correction(object):
         self.logger.info('Doing 10 meter bands')
         self._10_meter_bands = ['B02', 'B03', 'B04', 'B08']
         self.toa  = np.array([all_refs[band].astype(float)/10000. for band in self._10_meter_bands])
-        self.mask = (self.toa > 0).all(axis=0)
-        self.mask = self._block_mean(self.mask.astype(float), self.aero_res / 10) > 0 
+        self.fmask = (self.toa > 0).all(axis=0)
+        self.mask = self._block_mean(self.fmask.astype(float), self.aero_res / 10) > 0 
  
         self.logger.info('Reading in view angles.')
         self.va_files = [self.s2_file_dir + '/angles/VAA_VZA_%s.tif'%i for i in self._10_meter_bands]
@@ -141,8 +141,9 @@ class atmospheric_correction(object):
         self._band_indexs = [1, 2, 3, 7]        
         self.logger.info('Fire correction and splited into %d blocks.'%self._num_blocks**2)
         boa, unc = self.fire_correction()
-        
-        self.scale   = 0.25 
+        self.alp = np.zeros_like(self.fmask).astype(uint8)
+        self.alp[self.fmask] = 255
+        self.scale   = 0.25
         self.toa_rgb = clip(self.toa[[2,1,0], ...].transpose(1,2,0)*255/self.scale, 0., 255.).astype(uint8)
         self.boa_rgb = clip(boa     [[2,1,0], ...].transpose(1,2,0)*255/self.scale, 0., 255.).astype(uint8)
         self._save_rgb(self.toa_rgb, 'TOA_RGB.tif', self.example_file)
@@ -207,7 +208,7 @@ class atmospheric_correction(object):
         outputFileName = self.s2_file_dir+'/%s'%name
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 3, gdal.GDT_Byte, options=["TILED=YES", "COMPRESS=JPEG"])
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 4, gdal.GDT_Byte, options=["TILED=YES", "COMPRESS=JPEG"])
         dst_ds.SetGeoTransform(geotransform)
         dst_ds.SetProjection(projection)
         dst_ds.GetRasterBand(1).WriteArray(rgb_array[:,:,0])
@@ -216,6 +217,7 @@ class atmospheric_correction(object):
         dst_ds.GetRasterBand(2).SetScale(self.scale)
         dst_ds.GetRasterBand(3).WriteArray(rgb_array[:,:,2])
         dst_ds.GetRasterBand(3).SetScale(self.scale)
+        dst_ds.GetRasterBand(4).WriteArray(self.alp)
         dst_ds.FlushCache()
         dst_ds = None
 
@@ -267,7 +269,7 @@ class atmospheric_correction(object):
         rows              = np.repeat(np.arange(self._num_blocks), self._num_blocks)
         columns           = np.tile(np.arange(self._num_blocks), self._num_blocks)
         blocks            = list(zip(rows, columns))
-        band_ram          = 2.5e10 / (60. / self._mean_size)
+        band_ram          = 3.0e10 / (60. / self._mean_size)
         av_ram = psutil.virtual_memory().available 
         procs = np.min([int(len(blocks) * (av_ram / band_ram) / self.toa.shape[0]), psutil.cpu_count(), len(blocks)])
         if procs == 0:

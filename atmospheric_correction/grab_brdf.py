@@ -46,7 +46,10 @@ def mtile_cal(lat, lon):
     return h,v
 
 def get_hv(example_file):
-    g = gdal.Open(example_file)
+    try:
+        g = gdal.Open(example_file)
+    except:
+        g = example_file
     geo_t = g.GetGeoTransform()
     x_size, y_size = g.RasterYSize, g.RasterXSize
 

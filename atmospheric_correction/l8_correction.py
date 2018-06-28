@@ -112,7 +112,8 @@ class atmospheric_correction(object):
         self.scale   = 0.25 #np.percentile(self.boa[3][self.boa[3] > 0], 95)
         self.boa_rgb = np.clip(self.boa[[3,2,1]].transpose(1,2,0) * 255 / self.scale, 0, 255).astype(uint8)
         self.toa_rgb = np.clip(self.toa[[3,2,1]].data.transpose(1,2,0) * 255 / self.scale, 0, 255).astype(uint8)
-
+        self.alpha = np.zeros_like(self.mask).astype(uint8)
+        self.alpha[~self.mask] = 255
         self.logger.info('Saving corrected results')
         self._save_rgb(self.toa_rgb, 'TOA_RGB', self.example_file)
         self._save_rgb(self.boa_rgb, 'BOA_RGB', self.example_file)
@@ -179,7 +180,7 @@ class atmospheric_correction(object):
         outputFileName = self.l8_toa_dir + '/%s_%s.tif'%(self.l8_header, name)
         if os.path.exists(outputFileName):
             os.remove(outputFileName)
-        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 3, gdal.GDT_Byte, options=["TILED=YES", "COMPRESS=JPEG"])
+        dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 4, gdal.GDT_Byte, options=["TILED=YES", "COMPRESS=JPEG"])
         dst_ds.SetGeoTransform(geotransform)
         dst_ds.SetProjection(projection)
         dst_ds.GetRasterBand(1).WriteArray(rgb_array[:,:,0])
@@ -188,6 +189,7 @@ class atmospheric_correction(object):
         dst_ds.GetRasterBand(2).SetScale(self.scale)
         dst_ds.GetRasterBand(3).WriteArray(rgb_array[:,:,2])
         dst_ds.GetRasterBand(3).SetScale(self.scale)
+        dst_ds.GetRasterBand(4).WriteArray(self.alpha)
         dst_ds.FlushCache()
         dst_ds = None
 

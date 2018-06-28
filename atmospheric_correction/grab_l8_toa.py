@@ -159,5 +159,5 @@ class read_l8(object):
         qa_mask = ~((bqa >= 2720) & (bqa <= 2732))
         return qa_mask
 if __name__ == '__main__':
-    l8 = read_l8('/home/ucfafyi/DATA/S2_MODIS/l_data/LC08_L1TP_192027_20170526_20170615_01_T1', (192, 27), 2017, 5, 26, bands=[2,3,4,5,6,7])
+    l8 = read_l8('/home/ucfafyi/DATA/S2_MODIS/l_data/LC08_L1TP_036033_20160619_20170221_01_T1', (36, 33), 2016, 6, 19, bands=[2,3,4,5,6,7])
     #toa = l8._get_toa()

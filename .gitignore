@@ -24,4 +24,8 @@ task*
 */S2_data/*
 */images/*
 */old_code/*
+*/MODIS/*
+*psf/*
+*s2_l8_va/*
+*/auth
 

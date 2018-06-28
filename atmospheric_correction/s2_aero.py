@@ -28,6 +28,8 @@ from atmo_solver import solving_atmo_paras
 #from emulation_engine import AtmosphericEmulationEngine
 from psf_optimize import psf_optimize
 import warnings
+from sklearn.linear_model import HuberRegressor
+
 warnings.filterwarnings("ignore")
 
 class solve_aerosol(object):
@@ -51,7 +53,7 @@ class solve_aerosol(object):
                  acquisition = '0',
                  s2_psf      = None,
                  qa_thresh   = 255,
-                 aero_res    = 600, # resolution for aerosol retrival in meters should be larger than 500
+                 aero_res    = 900, # resolution for aerosol retrival in meters should be larger than 500
                  reconstruct_s2_angle = True):
 
         self.year        = year 
@@ -165,7 +167,7 @@ class solve_aerosol(object):
             high_indexs = self.Hx, self.Hy
             low_img     = np.ma.array(self.s2_boa[4])
             qa, cloud   = self.s2_boa_qa[4], self.bad_pix
-            xstd, ystd  = 29.75, 39
+            xstd, ystd  = 25.72, 34.27
             psf         = psf_optimize(high_img, high_indexs, low_img, qa, cloud, 0.1, xstd = xstd, ystd = ystd)
             xs, ys      = psf.fire_shift_optimize()
             ang         = 0
@@ -271,17 +273,23 @@ class solve_aerosol(object):
         return cost.sum()
 
     def mask_bad_pix(self):
-        #b8, b4 = self.target_bands['B08'].astype(float), self.target_bands['B04'].astype(float)
-        #ndvi                 = (b8 - b4)/(b8 + b4)
-        #water_mask           = ((ndvi < 0.01) & (b8 < 1100)) | ((ndvi < 0.1) & (b8 < 500)) | \
-        #                        np.repeat(np.repeat((self.target_bands['B12'] < 1), 2, axis=0), 2, axis=1)
-        #water_mask           = water_mask & (b8 >= 1) & (b4 >= 1)
-        self.ker_size        = int(round(max(3 * 29.75, 3 * 39)))
-        #water_mask           = binary_dilation(water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool)
-        self.water_mask      = False #binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool)
+        b8, b4 = self.target_bands['B08'].astype(float), self.target_bands['B04'].astype(float)
+        ndvi                 = (b8 - b4)/(b8 + b4)
+        water_mask           = ((ndvi < 0.01) & (b8 < 1100)) | ((ndvi < 0.1) & (b8 < 500)) | \
+                                np.repeat(np.repeat((self.target_bands['B12'] < 1), 2, axis=0), 2, axis=1)
+        b3, b11              = self.target_bands['B03'].astype(float), self.target_bands['B11'].astype(float) 
+        b11                  = np.repeat(np.repeat(b11, 2, axis=0), 2, axis=1)
+        ndsi                 = (b3-b11)/(b3+b11) 
+        snow_mask            = (ndsi > 0.42) & (b3 >= 1) & (b11 >= 1) 
+        water_mask           = water_mask & (b8 >= 1) & (b4 >= 1) | snow_mask
+        self.ker_size        = 2*int(round(max(1.96 * 25.72, 1.96 * 34.27)))
+        water_mask           = binary_dilation(water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool)
+        self.water_mask      = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool)
         valid_data_mask      = np.all([self.target_bands[band] >= 1 for band in ['B02', 'B03', 'B04', 'B08']], axis=0)
-        self.bad_pix         = binary_dilation(self.cloud | self.water_mask | (~valid_data_mask), \
-                               structure=np.ones((3,3)).astype(bool), iterations= self.ker_size).astype(bool)
+        self.bad_pix         = binary_erosion(self.cloud | self.water_mask | (~valid_data_mask), \
+                               structure=np.ones((3,3)).astype(bool), iterations= 30).astype(bool)
+        self.bad_pix         = binary_dilation(self.bad_pix, \
+                               structure=np.ones((3,3)).astype(bool), iterations= self.ker_size+30).astype(bool)
 
     def _resample_angles_and_elevation(self):
 
@@ -320,8 +328,8 @@ class solve_aerosol(object):
         else:                     
             f = np.load(self.s2_file_dir + '/MCD43.npz', encoding='latin1')
             boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist']
-            scale = 0.015 / np.nanmin(unc)
-            unc   = scale * np.array(unc)
+        scale = 0.015 / np.nanmin(unc)
+        unc   = scale * np.array(unc)
         return boa, unc, hx, hy, lx, ly, flist
 
     def _get_convolved_toa(self,):
@@ -335,7 +343,7 @@ class solve_aerosol(object):
             self.target_bands[band] = None
         del self.target_bands
         self.bad_pixs = self.bad_pix[self.Hx, self.Hy]
-        xstd, ystd = 29.75, 39
+        xstd, ystd = 25.72, 34.27
         xgaus  = np.exp(-2.*(np.pi**2)*(xstd**2)*((0.5 * np.arange(10980) /10980)**2))
         ygaus  = np.exp(-2.*(np.pi**2)*(ystd**2)*((0.5 * np.arange(10980) /10980)**2))
         gaus_2d = np.outer(xgaus, ygaus)
@@ -350,20 +358,34 @@ class solve_aerosol(object):
                    np.all(self.s2_boa >= 0.001, axis = 0) &\
                    np.all(self.s2_boa < 1,      axis = 0)
         toa_mask = ~self.bad_pix[self.Hx, self.Hy]
+        
         self.s2_mask    = boa_mask & qua_mask & toa_mask
         self.Hx         = self.Hx          [self.s2_mask]
         self.Hy         = self.Hy          [self.s2_mask]
         self.s2_toa     = self.s2_toa   [:, self.s2_mask]
         self.s2_boa     = self.s2_boa   [:, self.s2_mask]
         self.s2_boa_unc = self.s2_boa_qa[:, self.s2_mask]
-                                                                                                                                                                           
+
+        eps=1.7
+        mask = True
+        for i in range(len(self.s2_toa)):
+            x,y = self.s2_boa[i][...,None], self.s2_toa[i][...,None]
+            huber = HuberRegressor(fit_intercept=True, alpha=0.0, max_iter=100,epsilon=eps)
+            huber.fit(x,y)
+            mask *= ~huber.outliers_
+        #self.s2_mask *= mask
+        self.Hx         = self.Hx          [mask]
+        self.Hy         = self.Hy          [mask]
+        self.s2_toa     = self.s2_toa   [:, mask]
+        self.s2_boa     = self.s2_boa   [:, mask]
+        self.s2_boa_unc = self.s2_boa_unc[:, mask]
         tempm1 = np.zeros(self.full_res)
         tempm1[self.Hx, self.Hy] = 1
         tempm1 = tempm1.reshape(self.num_blocks, self.block_size, \
                                 self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
         #tempm2 = (~self.bad_pix).reshape(self.num_blocks, self.block_size, \
         #                                 self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
-        self.mask  = (tempm1 > 0.3) # & (tempm2 > 0.)
+        self.mask  = (tempm1 > 0.1) # & (tempm2 > 0.)
         #self.bp = 1 # boarder pixels
         #self.mask[:self.bp,  :] = False  
         #self.mask[:, -self.bp:] = False  
@@ -405,10 +427,10 @@ class solve_aerosol(object):
         sen_time_str    = json.load(open(self.s2_file_dir+'/tileInfo.json', 'r'))['timestamp']
         self.sen_time   = datetime.datetime.strptime(sen_time_str, u'%Y-%m-%dT%H:%M:%S.%fZ') 
         self.aot, self.tcwv, self.tco3 = self._read_cams(self.example_file)
-        self.aot[:]     = np.nanmean(self.aot) if np.nanmean(self.aot) < 1.9 else 1.5
-
+        self.aot[:]     = max(np.nanmean(self.aot) * 1.1 - 0.05, 0)# (1 + 0.3) # from cams validation
+       
         self.logger.info('Mean values from ECMWF forcasts are: %.03f, %.03f, %.03f.'%(self.aot.mean(), self.tcwv.mean(), self.tco3.mean()))
-        self.aot_unc    = np.ones(self.aot.shape)  * 0.5
+        self.aot_unc    = np.ones(self.aot.shape)  * 0.15
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.1
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.05
         
@@ -450,7 +472,7 @@ class solve_aerosol(object):
                                            self.emus,
                                            self.band_indexs,
                                            self.boa_bands,
-                                           gamma = 10.)
+                                           gamma = 20.)
             solved = self.aero._multi_grid_solver()
             return solved
 

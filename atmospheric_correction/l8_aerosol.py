@@ -27,6 +27,7 @@ from psf_optimize import psf_optimize
 import warnings
 warnings.filterwarnings("ignore")
 from scipy.stats import linregress
+from sklearn.linear_model import HuberRegressor
 
 class solve_aerosol(object):
     '''
@@ -72,6 +73,8 @@ class solve_aerosol(object):
         self.mcd43_tmp   = '%s/MCD43A1.A%d%03d.%s.006.*.hdf'
         self.spectral_transform = [[1.0425211806,      1.03763437575,     1.02046102587,     0.999167480738,  1.00072211685,    0.955317665361  ], 
                                    [0.000960797104206, -0.00263498369438, -0.00179952807464, 0.0018999624331, -0.0072213121738, 0.00782954328347]] 
+        self.spectral_transform = [[1.0, 1.0, 1.0, 1.0, 1.0, 1.0], 
+                                   [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]] 
     def _load_xa_xb_xc_emus(self,):
         xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xap.pkl'%(self.sensor))[0]
         xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xbp.pkl'%(self.sensor))[0]
@@ -141,7 +144,7 @@ class solve_aerosol(object):
             xstd, ystd, ang, xs, ys = self.l8_psf
         else:
             self.logger.info('No PSF parameters specified, start solving.')
-            xstd, ystd  = 12., 20.
+            xstd, ystd  = 8., 12
             psf         = psf_optimize(self.toa[-1].data, [self.Hx, self.Hy], np.ma.array(self.boa[-1]), self.boa_qa[-1], self.bad_pix, 0.1, xstd=xstd, ystd= ystd)
             xs, ys      = psf.fire_shift_optimize()
             ang         = 0
@@ -178,7 +181,7 @@ class solve_aerosol(object):
         border_mask   = np.zeros(self.full_res).astype(bool)
         border_mask[[0, -1], :] = True
         border_mask[:, [0, -1]] = True
-        xstd, ystd    = 12., 20.
+        xstd, ystd    = 8., 12.
         ker_size      = 2*int(round(max(1.96*xstd, 1.96*ystd)))
         ewater_mask   = binary_erosion (water_mask, structure = np.ones((3,3)).astype(bool), iterations=5).astype(bool) 
         ecloud        = binary_erosion (self.cloud, structure = np.ones((3,3)).astype(bool), iterations=10).astype(bool)
@@ -199,10 +202,10 @@ class solve_aerosol(object):
         self.sza        = np.nanmean(self._extend_vals(self.sza ).reshape(shape1), axis=(3,1))
         self.vaa        = np.nanmean(self._extend_vals(self.vaa ).reshape(shape2), axis=(4,2))
         self.vza        = np.nanmean(self._extend_vals(self.vza ).reshape(shape2), axis=(4,2))
-        self.aot_unc    = np.ones(self.aot.shape)  * 0.4
+        self.aot_unc    = np.ones(self.aot.shape)  * 0.15
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.1
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.05
-        self.aot[:]    = np.nanmean(self.aot)
+        self.aot[:]     = np.nanmean(self.aot) #* 1.3 - 0.05, 0) #* (1-0.3)
 
     def _get_boa(self,l8):
         if len(glob(self.l8_toa_dir + '/MCD43_%s.npz'%(l8.header))) == 0:
@@ -219,8 +222,9 @@ class solve_aerosol(object):
                      unc = unc, hx = hx, hy = hy, lx = lx, ly = ly, flist = flist) 
         else:           
             f = np.load(self.l8_toa_dir + '/MCD43_%s.npz'%l8.header, encoding='latin1')
-            boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist']
-
+            boa, unc, hx, hy, lx, ly, flist = f['boa'], f['unc'], f['hx'], f['hy'], f['lx'], f['ly'], f['flist'] 
+        scale = 0.015 / np.nanmin(unc)
+        unc   = scale * np.array(unc)
         return boa, unc, hx, hy, lx, ly, flist
 
     def _resample_angles_and_elevation(self, l8):
@@ -266,10 +270,10 @@ class solve_aerosol(object):
         self.vza = np.array(parmap(self._fill_nan, list(self.vza)))
         self.saa, self.sza, self.ele, self.aot, self.tcwv, self.tco3 = \
         parmap(self._fill_nan, [self.saa, self.sza, self.ele, self.aot, self.tcwv, self.tco3])
-        self.aot_unc    = np.ones(self.aot.shape)  * 0.4
+        self.aot_unc    = np.ones(self.aot.shape)  * 0.15
         self.tcwv_unc   = np.ones(self.tcwv.shape) * 0.1
         self.tco3_unc   = np.ones(self.tco3.shape) * 0.05
-        self.aot[:]    = np.nanmean(self.aot)
+        self.aot[:]     = np.nanmean(self.aot)# * 1.3 - 0.05, 0.)# / (1 + 0.3)
        
     def _fill_nan(self, array):
         x_shp, y_shp = array.shape
@@ -283,7 +287,7 @@ class solve_aerosol(object):
 
     def _get_convolved_toa(self,):
         self.bad_pixs = self.bad_pix[self.Hx, self.Hy]
-        xstd, ystd = 12., 20.
+        xstd, ystd = 8., 12.
         x_shp, y_shp = self.toa[0].shape
         xgaus  = np.exp(-2.*(np.pi**2)*(xstd**2)*((0.5 * np.arange(x_shp) / x_shp)**2))
         ygaus  = np.exp(-2.*(np.pi**2)*(ystd**2)*((0.5 * np.arange(y_shp) / y_shp)**2))
@@ -306,6 +310,18 @@ class solve_aerosol(object):
         self.boa_unc = self.boa_qa[:, self.l8_mask]
         tempm  = np.zeros((self.efull_res, self.efull_res))
         tempm[self.Hx, self.Hy] = 1
+        eps=1.7
+        mask = True
+        for i in range(len(self.toa)):
+            x,y = self.boa[i][...,None], self.toa[i][...,None]
+            huber = HuberRegressor(fit_intercept=True, alpha=0.0, max_iter=100,epsilon=eps)
+            huber.fit(x,y)
+            mask *= ~huber.outliers_
+        self.Hx      = self.Hx        [mask]                                        
+        self.Hy      = self.Hy        [mask]                                        
+        self.toa     = self.toa    [:, mask]                                        
+        self.boa     = self.boa    [:, mask]                                        
+        self.boa_unc = self.boa_unc[:, mask] 
         #tempm = tempm.reshape(self.num_blocks, self.block_size, \
         #                      self.num_blocks, self.block_size).astype(int).sum(axis=(3,1))
         self.mask = tempm > 0 
@@ -382,7 +398,7 @@ class solve_aerosol(object):
                                        self.emus,
                                        self.band_indexs,
                                        self.boa_bands,
-                                       gamma = 10,
+                                       gamma = 20,
                                        alpha   = -1.6,
                                        pix_res = 30)
         solved    = self.aero._multi_grid_solver()

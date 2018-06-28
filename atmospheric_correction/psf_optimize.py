@@ -52,11 +52,14 @@ class psf_optimize(object):
         #xstd, ystd = 29.75, 39
         #ker = self.gaussian(self.xstd, self.ystd, 0)
         gaus_2d = self.dct_gaussian(self.xstd, self.ystd, self.high_img.shape)
-        self.conved = idct(idct(dct(dct(self.high_img, axis=0, norm = 'ortho'), axis=1, norm='ortho') * gaus_2d, \
-                                                       axis=1, norm = 'ortho'), axis=0, norm='ortho')
+        if (self.xstd < 1.) or (self.ystd < 1.):
+            self.conved = self.high_img
+        else:
+            self.conved = idct(idct(dct(dct(self.high_img, axis=0, norm = 'ortho'), axis=1, norm='ortho') * gaus_2d, \
+                                                           axis=1, norm = 'ortho'), axis=0, norm='ortho')
         #self.conved = signal.fftconvolve(self.high_img, ker, mode='same')
 
-        l_mask = (~self.low_img.mask) & (self.qa<self.qa_thresh)
+        l_mask = (~self.low_img.mask) & (self.qa<self.qa_thresh) & (~np.isnan(self.low_img)) & (~np.isnan(self.qa))
         h_mask =  ~self.bad_pixs[self.Hx, self.Hy]
         self.lh_mask = l_mask & h_mask
 
@@ -145,8 +148,9 @@ class psf_optimize(object):
         self.paras, self.costs = np.array([i[0] for i in self.shift_solved]), \
                                            np.array([i[1] for i in self.shift_solved])
 
-        xs, ys = self.paras[self.costs==np.nanmin(self.costs)][0].astype(int)
-        if self.costs.min() == 100000000000.:
+        if (1 - self.costs.min()) >= 0.6:
+            xs, ys = self.paras[self.costs==np.nanmin(self.costs)][0].astype(int)
+        else:
             xs, ys = 0, 0
         #print 'Best shift is ', xs, ys, 'with the correlation of', 1-self.costs.min()
         return xs, ys
@@ -155,9 +159,9 @@ class psf_optimize(object):
     def fire_gaus_optimize(self,):
         xs, ys = self.fire_shift_optimize()
         if self.costs.min()<0.1:
-            min_val = [12,12, -15,xs-2,ys-2]
-            max_val = [50,50, 15, xs+2,ys+2]
-            self.bounds = [12,50],[12,50],[-15,15],[xs-2,xs+2],[ys-2, ys+2]
+            min_val = [4, 4, -15,xs-2,ys-2]
+            max_val = [40,40, 15, xs+2,ys+2]
+            self.bounds = [4,40],[4,40],[-15,15],[xs-2,xs+2],[ys-2, ys+2]
 
             ps, distributions = create_training_set(self.parameters, min_val, max_val, n_train=50)
             print('Start solving...')

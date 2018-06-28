@@ -15,6 +15,7 @@ class reproject_data(object):
                  target_img   = None,
                  dstSRS       = None,
                  srcNodata    = np.nan,
+                 dstNodata    = np.nan,
                  outputType   = None,
                  verbose      = False,
                  xmin         = None,
@@ -33,6 +34,7 @@ class reproject_data(object):
         self.verbose    = verbose
         self.dstSRS     = dstSRS
         self.srcNodata  = srcNodata
+        self.dstNodata  = dstNodata
         self.outputType = gdal.GDT_Unknown if outputType is None else outputType
         self.xmin       = xmin
         self.xmax       = xmax
@@ -70,18 +72,46 @@ class reproject_data(object):
             dstSRS     = osr.SpatialReference( )
             raster_wkt = g.GetProjection()
             dstSRS.ImportFromWkt(raster_wkt)
-            self.g = gdal.Warp('', self.source_img, format = 'MEM', outputBounds = [xmin, ymin, xmax, ymax], dstNodata=np.nan, \
+            self.g = gdal.Warp('', self.source_img, format = 'MEM', outputBounds = [xmin, ymin, xmax, ymax], dstNodata=self.dstNodata, \
                                xRes = self.xRes, yRes = self.yRes, dstSRS = dstSRS, outputType = self.outputType, srcNodata = self.srcNodata, resampleAlg = self.resample)
             
         else:
             self.g = gdal.Warp('', self.source_img, format = 'MEM', outputBounds = [self.xmin, self.ymin, \
                                self.xmax, self.ymax], xRes = self.xRes, yRes = self.yRes, dstSRS = self.dstSRS,\
-                               copyMetadata=True, outputType = self.outputType, dstNodata=np.nan, srcNodata = self.srcNodata, resampleAlg = self.resample)
+                               copyMetadata=True, outputType = self.outputType, dstNodata=self.dstNodata, srcNodata = self.srcNodata, resampleAlg = self.resample)
         if self.g.RasterCount <= 3:
             self.data = self.g.ReadAsArray()
             #return self.data
         elif self.verbose:
             print('There are %d bands in this file, use g.GetRasterBand(<band>) to avoid reading the whole file.'%self.g.RasterCount)
+
+def array_to_raster(array, example_file):                                                                                                               
+    if array.ndim == 2:                  
+        bands = 1                        
+    elif array.ndim ==3:                 
+        bands = min(array.shape)     
+        t = np.argsort(array.shape)
+        array = array.transpose(t)
+    else:                                
+        raise IOError('Only 2 or 3 D array is supported.')
+    try:                                 
+        g = gdal.Open(example_file)      
+    except:                              
+        g = example_file                 
+    driver = gdal.GetDriverByName('MEM') 
+    ds = driver.Create('', array.shape[-1], array.shape[-2], bands, gdal.GDT_Float32)
+    ds.SetProjection(g.GetProjection())  
+    geotransform    = list(g.GetGeoTransform())
+    geotransform[1] = geotransform[1] * g.RasterXSize / (1. * array.shape[-1])
+    geotransform[5] = geotransform[5] * g.RasterYSize / (1. * array.shape[-2])
+    ds.SetGeoTransform(geotransform)     
+    if array.ndim == 3:                  
+        for i in range(bands):           
+            ds.GetRasterBand(i+1).WriteArray(array[i])
+    else:                                
+         ds.GetRasterBand(1).WriteArray(array)                                                                                                           
+    return ds
+
 
 if __name__=='__main__':
     ele = reproject_data('/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt','/data/nemesis/S2_data/32/U/PU/2017/12/15/0/B02.jp2', outputType= gdal.GDT_Float32, ) 

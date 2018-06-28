@@ -128,8 +128,8 @@ class solving_atmo_paras(object):
         level_y = math.log(by, 2)
         level   = int(min(level_x, level_y))
         scale_factors = 1. / 2**np.arange(level)[::-1]
-        shapes        = (np.array([bx, by])[..., None] * scale_factors).astype(int).T
-        shapes[0]     = np.array([3,3])
+        shapes        = (np.array([bx, by])[..., None] * scale_factors).astype(int).T#[-7:]
+        #shapes[0]     = np.array([3,3])
         shape_dict    = dict(zip(range(len(shapes)), shapes))
         #order        = [0, 1, 2, 1, 0, 1, 2, 3, 4, 3, 2, 3, 4] + range(5, len(shapes))
         order         =  range(len(shapes))
@@ -143,11 +143,11 @@ class solving_atmo_paras(object):
         self.logger.info('Total %d level of grids are going to be used.'% (len(shapes)))
         #for ii, shape in enumerate(shapes):
         for ii in order:
+            #import pdb; pdb.set_trace()
             shape = shape_dict[ii]
             print('+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
             self.logger.info(bcolors.BLUE + 'Optimizing at grid level %d' % (ii+1) + bcolors.ENDC)
             self.num_blocks_x, self.num_blocks_y = shape
-            self.b_m_pixs                        = (self.aero_res / 500.)**2
             self.control_variables = np.zeros((self.boa.shape[0], 7,shape[0], shape[1]))
 
             if self.vza.ndim == 2:
@@ -170,7 +170,13 @@ class solving_atmo_paras(object):
             for i in range(self.num_blocks_x):
                 for j in range(self.num_blocks_y):
                     self._coarse_num[i,j]        = subs[i][j].sum()
+            #if ii < 0:
+            #    self._coarse_mask = 1. * self._coarse_num / self._coarse_num.max() > 0.7
+            #    pre_mask = self._coarse_mask
+            #else:
             self._coarse_mask = self._coarse_num > 0
+            self.b_m_pixs                        = self._coarse_num.max()#(self.aero_res / 500.)**2
+                #self._coarse_mask = self._coarse_mask & self._grid_conversion(pre_mask, shape).astype(bool)
             #subs = [np.array_split(sub, self.num_blocks_y, axis=1) for sub in np.array_split(self.mask, self.num_blocks_x, axis=0)]           
             #self._coarse_mask = np.zeros((self.num_blocks_x, self.num_blocks_y))
             #for i in range(self.num_blocks_x):
@@ -194,10 +200,12 @@ class solving_atmo_paras(object):
             #P = np.ones(len(p0))#(self.prior_uncs**-2).ravel() #+ 2. * (1. / self.gamma)**-2
             #P[int(len(p0)/2.):] = 0.01
             #p0 = p0 / P
-            m = 100 if i < 5 else 20
+            mc = 100 if ii < 5 else 20
+            mf = 20  if ii > 6 else 60
+            mi = 20  if ii > 6 else 60
             factr = 1e8
             ftol = factr * np.finfo(float).eps
-            psolve = optimize.minimize(self._cost, p0, jac=True, bounds = bounds, method='L-BFGS-B', options={'disp': False, 'maxcor': m, 'gtol': 1e-02, 'ftol': ftol})
+            psolve = optimize.minimize(self._cost, p0, jac=True, bounds = bounds, method='L-BFGS-B', options={'disp': False, 'maxcor': mc, 'gtol': 1e-02, 'ftol': ftol, 'maxfun': mf, 'maxiter': mi})
             #res3 = optimize.minimize(self._cost, p0, jac=True, method='TNC', options={'disp': True})
             #res4 = optimize.minimize(self._cost, p0, jac=, method='COBYLA', options={'disp': True})
             #print res1, res2 #res3
@@ -205,21 +213,18 @@ class solving_atmo_paras(object):
             self.logger.info(bcolors.GREEN + psolve['message'] + bcolors.ENDC)
             self.logger.info(bcolors.GREEN + 'Iterations: %d'%psolve['nit'] + bcolors.ENDC)
             self.logger.info(bcolors.GREEN + 'Function calls: %d'%psolve['nfev'] +bcolors.ENDC)  
-            #self.logger.info(bcolors.GREEN + psolve[2]['task'] + bcolors.ENDC)
-            #self.logger.info(bcolors.GREEN + 'Iterations: %d'%psolve[2]['nit'] + bcolors.ENDC)  
-            #self.logger.info(bcolors.GREEN + 'Function calls: %d'%psolve[2]['funcalls'] +bcolors.ENDC)
             self.aot_prior, self.tcwv_prior = psolve['x'].reshape(2, self.num_blocks_x, self.num_blocks_y)
-            self.tcwv_prior = self.tcwv_prior
-            self._obs_cost_test(psolve['x'], do_unc = True)     
-            unc = (np.nansum([self.obs_unc.reshape(2, -1), 1. / self.prior_uncs**2 + self.gamma**2], axis = 0)) ** -0.5
-            self.aot_unc,   self.tcwv_unc   = unc.reshape(2, self.num_blocks_x, self.num_blocks_y)
+            #self.tcwv_prior = self.tcwv_prior
             if ii != len(shapes)-1:
                 mask = (self.aot_prior <= 0) | (self.aot_prior > 2.) | (self.tcwv_prior <= self.bot_bounds[1]) | (self.tcwv_prior > self.up_bounds[1])
                 self.aot_prior[mask]  = self.priors[0].reshape(shape)[mask]
-                self.aot_unc  [mask]  = self.prior_uncs[0].reshape(shape)[mask]
+                #self.aot_unc  [mask]  = self.prior_uncs[0].reshape(shape)[mask]
                 self.tcwv_prior[mask] = self.priors[1].reshape(shape)[mask]
-                self.tcwv_unc  [mask] = self.prior_uncs[1].reshape(shape)[mask]
-
+                #self.tcwv_unc  [mask] = self.prior_uncs[1].reshape(shape)[mask]
+            else:
+                self._obs_cost_test(psolve['x'], do_unc = True)     
+                unc = (np.nansum([self.obs_unc.reshape(2, -1), 1. / self.prior_uncs**2 + self.gamma**2], axis = 0)) ** -0.5
+                self.aot_unc,   self.tcwv_unc   = unc.reshape(2, self.num_blocks_x, self.num_blocks_y)
         self.tco3_prior, self.tco3_unc  = self._grid_conversion(self.tco3_prior, shape), self._grid_conversion(self.tco3_unc, shape)
         post_solved = np.array([self.aot_prior, self.tcwv_prior, self.tco3_prior]) 
         post_unc    = np.array([self.aot_unc,   self.tcwv_unc,   self.tco3_unc]) 
@@ -364,7 +369,7 @@ class solving_atmo_paras(object):
         obs_J, obs_J_       = self._obs_cost_test(p)
         prior_J, prior_J_   = self._prior_cost(p)
         smooth_J, smooth_J_ = self._smooth_cost(p)
-        J  = np.nansum(obs_J/self.b_m_pixs + prior_J + smooth_J)
+        J  = np.nansum(obs_J/self.b_m_pixs**2 + prior_J + smooth_J)
         J_ = (obs_J_/self.b_m_pixs +  prior_J_ + smooth_J_).ravel()
         #preconditioner
         #P = np.ones(len(J_))#(self.prior_uncs**-2).ravel() #+ 2. * (1. / self.gamma)**-2
