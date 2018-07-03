@@ -1,10 +1,15 @@
 import requests
-from datetime import datetime, timedelta
-with open('auth', 'rb') as f:
-    auth = tuple(f.read().split('\n')[0].split(','))
+import numpy as np
 from osgeo import ogr
 from osgeo import osr
-import numpy as np
+from functools import partial
+from multiprocessing import Pool
+from collections import defaultdict
+from xml.etree import cElementTree as ET
+from datetime import datetime, timedelta
+
+with open('auth', 'rb') as f:
+    auth = tuple(f.read().split('\n')[0].split(','))
 
 source = osr.SpatialReference()
 source.ImportFromEPSG(4326)
@@ -14,7 +19,7 @@ transform = osr.CoordinateTransformation(source, target)
 tile_area = 12056040000.
 
 base = 'https://scihub.copernicus.eu/dhus/search?start=0&rows=100&q='
-t_date = datetime(2016, 11, 1)
+t_date = datetime(2016, 10, 1)
 
 def find_all(location, start='2015-01-01', end=datetime.now().strftime('%Y-%m-%d'), cloud_cover='[0 TO 100]', product_type='S2MSI1C', search_by_tile=True, val_pix_thresh = 0):
     if isinstance(cloud_cover, (int, float)):
@@ -73,32 +78,11 @@ def find_all(location, start='2015-01-01', end=datetime.now().strftime('%Y-%m-%d
                         val_pix = None
                         ret.append([title, date, foot, cloud, durl, qurl, val_pix])
     if total >= 100:
-        for page in range(1, pages):
-            print 'searching page', page+1, 'of', pages
-            url = base.replace('start=0&rows=100', 'start=%d&rows=100'%(page*100)) + temp%(location, start, end, start, end, product_type, cloud_cover)
-            r = requests.get(url, auth = auth)
-            feed = r.json()['feed']                  
-            date  = feed['entry'][i]['date'][1]['content']
-            for i in range(len(feed['entry'])):
-                title = feed['entry'][i]['title']
-                cloud = feed['entry'][i]['double']['content']
-                durl  = feed['entry'][i]['link'][0]['href']#.replace('$value', 'i$value')
-                qurl  = feed['entry'][i]['link'][2]['href']#.replace('$value', '\$value')   
-                for ds in feed['entry'][i]['date']:
-                    if ds['name'] == u'beginposition':
-                        date  = ds['content']
-                for j in feed['entry'][i]['str']:
-                    if 'POLYGON ((' in j['content']:
-                            foot = j['content']
-                            if search_by_tile:
-                                geom = ogr.CreateGeometryFromWkt(foot)
-                                geom.Transform(transform)
-                                val_pix = (geom.GetArea()/tile_area)*100.
-                                if val_pix > val_pix_thresh:                    
-                                    ret.append([title, foot, cloud, durl, qurl, val_pix])
-                            else:
-                                val_pix = None
-                                ret.append([title, date, foot, cloud, durl, qurl, val_pix])
+        par = partial(search_page, pages=pages, base=base, temp=temp, location=location, \
+                      start=start, end=end, product_type=product_type, cloud_cover=cloud_cover, auth=auth)
+        p = Pool(2)            
+        ret += p.map(par, range(1, pages))
+
     if temp1 is not None:
         print 'Searching data before %s'%(t_date.strftime('%Y-%m-%d'))
         url = base + temp1%(location, start, t_date.strftime('%Y-%m-%d'), start, t_date.strftime('%Y-%m-%d'), product_type, cloud_cover) 
@@ -112,8 +96,8 @@ def find_all(location, start='2015-01-01', end=datetime.now().strftime('%Y-%m-%d
         for i in range(len(feed['entry'])):
             title = feed['entry'][i]['title']                                           
             cloud = feed['entry'][i]['double']['content']                               
-            durl  = feed['entry'][i]['link'][0]['href']#.replace('$value', '\$value')   
-            qurl  = feed['entry'][i]['link'][2]['href']#.replace('$value', '\$value')   
+            durl  = feed['entry'][i]['link'][0]['href']
+            qurl  = feed['entry'][i]['link'][2]['href']
             for ds in feed['entry'][i]['date']:
                     if ds['name'] == u'beginposition':
                         date  = ds['content'] 
@@ -122,63 +106,74 @@ def find_all(location, start='2015-01-01', end=datetime.now().strftime('%Y-%m-%d
                         foot = j['content']                                             
             ret.append([title, date, foot, cloud, durl, qurl, None])                                
         if total >= 100:     
-            for page in range(1, pages):  
-                print 'searching page', page+1, 'of', pages                             
-                url = base.replace('start=0&rows=100', 'start=%d&rows=100'%(page*100)) + temp1%(location,start, \
-                      t_date.strftime('%Y-%m-%d'), start, t_date.strftime('%Y-%m-%d'), product_type, cloud_cover)
-                r = requests.get(url, auth = auth)
-                feed = r.json()['feed']                                                 
-                for i in range(len(feed['entry'])):                                     
-                    title = feed['entry'][i]['title']                                   
-                    cloud = feed['entry'][i]['double']['content']                       
-                    durl  = feed['entry'][i]['link'][0]['href']#.replace('$value', 'i$value')
-                    qurl  = feed['entry'][i]['link'][2]['href']#.replace('$value', '\$value')   
-                    for ds in feed['entry'][i]['date']:
-                        if ds['name'] == u'beginposition':
-                            date  = ds['content'] 
-                    for j in feed['entry'][i]['str']:
-                        if 'POLYGON ((' in j['content']:
-                            foot = j['content']
-                    ret.append([title, date, foot, cloud, durl, qurl, None])
-        
-        
+            par = partial(search_page, pages=pages, base=base, temp=temp1, location=location, \
+                          start=start, end = t_date.strftime('%Y-%m-%d'), product_type=product_type, cloud_cover=cloud_cover, auth=auth)
+            p = Pool(2)
+            ret += p.map(par, range(1, pages))
     return ret
 
-def query_sen2(location, start='2015-01-01', end=datetime.now().strftime('%Y-%m-%d'), cloud_cover='[0 TO 100]', product_type='S2MSI1C', search_by_tile=True, band = None, val_pix_thresh = 0 ):
+def search_page(page, pages, base, temp, location,start, end, product_type, cloud_cover, auth):
+    print 'searching page', page+1, 'of', pages                             
+    url = base.replace('start=0&rows=100', 'start=%d&rows=100'%(page*100)) + \
+                        temp%(location,start, end, start, end, product_type, cloud_cover)
+    r = requests.get(url, auth = auth)
+    feed = r.json()['feed']                                                 
+    for i in range(len(feed['entry'])):                                     
+        title = feed['entry'][i]['title']                                   
+        cloud = feed['entry'][i]['double']['content']                       
+        durl  = feed['entry'][i]['link'][0]['href']
+        qurl  = feed['entry'][i]['link'][2]['href']
+        for ds in feed['entry'][i]['date']:
+            if ds['name'] == u'beginposition':
+                date  = ds['content'] 
+        for j in feed['entry'][i]['str']:
+            if 'POLYGON ((' in j['content']:
+                foot = j['content']
+        return [title, date, foot, cloud, durl, qurl, None]
+
+def query_sen2(location, start='2015-01-01', end=datetime.now().strftime('%Y-%m-%d'), cloud_cover='[0 TO 100]', product_type='S2MSI1C', search_by_tile=True, band = None, val_pix_thresh = 0, one_by_one = True):
     ret = find_all(location, start, end, cloud_cover, product_type, search_by_tile, val_pix_thresh)
-    for re in ret:
-        if band is not None:
-            r = requests.get("%s/Nodes('%s.SAFE')/Nodes('manifest.safe')/$value"%(re[4].split('/$value')[0], re[0]), auth = auth)
-            man = r.content                                                                                                      
-            for i in man.split('</'):                                                                                            
-                if 'locatorType="URL" href=' in i:                                                                               
-                    fname = i.split('href=')[1].split('"')[1]                                                                    
-                    if isinstance(search_by_tile, str):                                                                                    
-                        if (search_by_tile in fname) & (band in fname):                                                                                   
-                            print fname 
-                    else:
-                        if band in fname:                                                                                   
-                            print fname 
-        else:
-            sen_time = datetime.strptime(re[1].split('T')[0], '%Y-%m-%d')
-            if (sen_time  < t_date) & isinstance(search_by_tile, str): 
-                #print 'filtering data before %s'%(t_date.strftime('%Y-%m-%d'))
-                r = requests.get("%s/Nodes('%s.SAFE')/Nodes('manifest.safe')/$value"%(re[4].split('/$value')[0], re[0]), auth = auth)
-                man = r.content
-                for i in man.split('</'):
-                    if 'locatorType="URL" href=' in i:
-                        fname = i.split('href=')[1].split('"')[1]
-                        if search_by_tile in fname:
-                            print fname
-        
-                #r = requests.get("%s/Nodes('%s.SAFE')/Nodes('GRANULE')/Nodes?$format=json"%(re[4].split('/$value')[0], re[0]), auth = auth) 
-                #rj = r.json()
-                #for i in rj['d']['results']:
-                #    if tile_name is not None:
-                #        if tile_name in i['Id']:
-                #            if band is not None:
-                #                #print i['Id'], i['Nodes']['__deferred']['uri']
-                #                print i['Nodes']['__deferred']['uri'] + "('IMG_DATA')/Nodes('" + i['Id'].split('_N')[0] + "_%s.jp2')/$value" %band
+    if band is not None:
+        par = partial(search_tile_and_band, search_by_tile = search_by_tile, band = band, auth = auth)
+        p = Pool(2)
+        ret = p.map(par, ret)
+        ret = [i for i in ret if i is not None]
+    else:
+        if (type(search_by_tile) is str) & (datetime.strptime(start, '%Y-%m-%d')< t_date):
+            par = partial(search_tile_and_band, search_by_tile = search_by_tile, band = None, auth = auth)
+            p = Pool(2)                                         
+            b_ret = [i for i in ret if datetime.strptime(':'.join(i[1].split(':')[:-1]), '%Y-%m-%dT%H:%M') < t_date]
+            a_ret = [[i[0], i[4]] for i in ret if datetime.strptime(':'.join(i[1].split(':')[:-1]), '%Y-%m-%dT%H:%M') >= t_date]
+            ret = p.map(par, b_ret)
+            if one_by_one:
+                ret = [i for i in ret if i is not None] + a_ret
+            else:
+                ret   = [[b_ret[i][0], b_ret[i][4]] for i in range(len(b_ret)) if ret[i] is not None] + a_ret
+        elif (type(search_by_tile) is not str):
+            ret = [[i[0], i[4]] for i in ret]
+    return ret
+
+def search_tile_and_band(re, search_by_tile, band, auth):
+    urls = []
+    url = "%s/Nodes('%s.SAFE')/"%(re[4].split('/$value')[0], re[0])
+    r = requests.get(url + "Nodes('manifest.safe')/$value", auth = auth)
+    e = ET.XML(r.content)                        
+    d = etree_to_dict(e)                         
+    dataObject = d['{urn:ccsds:schema:xfdu:1}XFDU']['dataObjectSection']['dataObject']
+    fnames = [do['byteStream']['fileLocation']['href'] for do in dataObject]
+    for fname in fnames:                         
+        if (str(search_by_tile) in fname) & (str(band) in fname):
+            furl = fname.replace('/', "')/Nodes('").replace(".')/", url) + "')/$value"
+            urls.append([fname, furl])
+        elif (str(search_by_tile) in fname):                                          
+            furl = fname.replace('/', "')/Nodes('").replace(".')/", url) + "')/$value"
+            urls.append([fname, furl])
+        elif str(band) in fname:
+            furl = fname.replace('/', "')/Nodes('").replace(".')/", url) + "')/$value"
+            urls.append([fname, furl])
+    if len(urls)>0:
+        return urls
+
 def downdown(url_fname, auth=auth):
     url, fname = url_fname
     r = requests.get(url, stream=True, auth=auth)
@@ -188,5 +183,34 @@ def downdown(url_fname, auth=auth):
                 f.write(chunk)
 
 
+def etree_to_dict(t):
+    d = {t.tag: {} if t.attrib else None}
+    children = list(t)
+    if children:
+        dd = defaultdict(list)
+        for dc in map(etree_to_dict, children):
+            for k, v in dc.items():
+                dd[k].append(v)
+        d = {t.tag: {k:v[0] if len(v) == 1 else v for k, v in dd.items()}}
+    if t.attrib:
+        d[t.tag].update((k, v) for k, v in t.attrib.items())
+    if t.text:
+        text = t.text.strip()
+        if children or t.attrib:
+            if text:
+              d[t.tag]['#text'] = text
+        else:
+            d[t.tag] = text
+    return d
+
 if __name__ == '__main__':
-     a = query_sen2('POLYGON((4.795757185813976 41.21247680330302,19.787525048248387 41.21247680330302,19.787525048248387 51.690725710472634,4.795757185813976 51.690725710472634,4.795757185813976 41.21247680330302))', search_by_tile='33TVJ', end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band = 'B02')
+    aoi = 'POLYGON((4.795757185813976 41.21247680330302,19.787525048248387 41.21247680330302,19.787525048248387 51.690725710472634,4.795757185813976 51.690725710472634,4.795757185813976 41.21247680330302))'
+    ao = 'POLYGON((115.79984234354565 39.41267418434987,115.81853363330639 39.41267418434987,115.81853363330639 39.42542974293974,115.79984234354565 39.42542974293974,115.79984234354565 39.41267418434987))'
+    #a = query_sen2(aoi, search_by_tile='33TVJ', end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band = 'B02')
+    #b = query_sen2(aoi, search_by_tile='33TVJ', end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band = None)
+    c = query_sen2(ao, search_by_tile='50SLJ', end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band=None, one_by_one = True)
+
+
+
+
+

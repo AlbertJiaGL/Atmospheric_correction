@@ -283,17 +283,17 @@ class solve_aerosol(object):
                                                                 outputType= gdal.GDT_Float32,\
                                                                 resample = gdal.GRIORA_Bilinear).g
 
-    def _ang_parser(self, ang):
-        if os.path.exists(str(ang)):    
-            ang_g = gdal.Open(str(ang)) 
-        elif type(i).__module__== 'numpy':
-            ang_g = array_to_raster(ang, self.example_file) 
+    def _var_parser(self, var):
+        if os.path.exists(str(var)):    
+            var_g = gdal.Open(str(var)) 
+        elif type(var).__module__== 'numpy':
+            var_g = array_to_raster(var, self.example_file) 
         else:              
-            ang = float(ang) 
-            ang_array = np.zeros((10,10))      
-            ang_array[:] = ang
-            ang_g = array_to_raster(ang_array, self.example_file)
-        return ang_g
+            var = float(var) 
+            var_array = np.zeros((10,10))      
+            var_array[:] = var
+            var_g = array_to_raster(var_array, self.example_file)
+        return var_g
 
     def _parse_angles(self,):
         '''
@@ -301,19 +301,19 @@ class solve_aerosol(object):
         '''
         self._view_angles = []
         if len(self.view_angles)==1:
-            ang_g = self._ang_parser(self.view_angles[0])
+            ang_g = self._var_parser(self.view_angles[0])
             self.view_angles = [ang_g,]
         for i in self.view_angles:
-            ang_g = self._ang_parser(i)
+            ang_g = self._var_parser(i)
             self._view_angles.append(ang_g)
 
         self._sun_angles = []            
         if os.path.exists(str(self.sun_angles)):
-            ang_g = self._ang_parser(self.sun_angles)
+            ang_g = self._var_parser(self.sun_angles)
             self._sun_angles = [ang_g,]#self.nearest_resampler(ang_g).ReadAsArray()
         else:
             for i in self.sun_angles:        
-                ang_g = self._ang_parser(i)
+                ang_g = self._var_parser(i)
                 self._sun_angles.append(ang_g)#self.nearest_resampler(ang_g).ReadAsArray())
 
       
@@ -339,18 +339,19 @@ class solve_aerosol(object):
                     priors[i+3] = defalt_uncs[i]
         temp = []
         for _, i in enumerate(priors):
-            if os.path.exists(str(i)):                                                                  
-                _g = gdal.Open(str(i))                                                               
-            elif type(i).__module__== 'numpy':                                                          
-                _g = array_to_raster(i, self.example_file)
-            else:
-                val = float(i)
-                g_array = np.zeros((10,10))
-                g_array[:] = val
-                _g = array_to_raster(g_array, self.example_file)
-            prior_g = self.bilinear_resampler(_g)
+            var_g = self._var_parser(i) 
+            #if os.path.exists(str(i)):                                                                  
+            #    _g = gdal.Open(str(i))                                                               
+            #elif type(i).__module__== 'numpy':                                                          
+            #    _g = array_to_raster(i, self.example_file)
+            #else:
+            #    val = float(i)
+            #    g_array = np.zeros((10,10))
+            #    g_array[:] = val
+            #    _g = array_to_raster(g_array, self.example_file)
+            prior_g = self.bilinear_resampler(var_g)
             if use_cams[_]:
-                g = _g.GetRasterBand(int(time_ind+1))
+                g      = var_g.GetRasterBand(int(time_ind+1))
                 offset = g.GetOffset()            
                 scale  = g.GetScale()             
                 data   = prior_g.GetRasterBand(int(time_ind+1)).ReadAsArray() * scale + offset
@@ -783,7 +784,7 @@ def test_modis():
         driver = gdal.GetDriverByName('GTiff')
         band_name = '/MODIS_' + tile + obs_time.strftime('_%Y%m%d_%H%M_') + 'band%d.tif'%(i+1)
         if os.path.exists(toa_dir + band_name):                                                        
-            os.remove(toa_dir + band_nam) 
+            os.remove(toa_dir + band_name) 
         ds = driver.Create(toa_dir + band_name, 2400, 2400, 1, gdal.GDT_Float32, options=["TILED=YES", "COMPRESS=DEFLATE"])
         geotransform = g.GetGeoTransform()
         projection  = g.GetProjection()

@@ -17,6 +17,7 @@ except:
 from numpy import clip, uint8
 from multi_process import parmap
 from scipy.interpolate import griddata
+from scipy.ndimage import binary_dilation
 from reproject import reproject_data, array_to_raster
 
 warnings.filterwarnings("ignore")
@@ -153,7 +154,7 @@ class atmospheric_correction(object):
         self.example_file = self._toa_bands[0]
         if self.cloud_mask is None:
             self.cloud_mask = False
-        self.mask = np.isfinite(self.example_file.ReadAsArray())# & (~self.cloud_mask)
+        self.mask = self.example_file.ReadAsArray() >0# & (~self.cloud_mask)
         self.mask_g = array_to_raster(self.mask.astype(float), self.example_file)
         self.mask = self.mask.astype(bool)
         self.mg    = gdal.Warp('', band, format = 'MEM', srcNodata = [-32768, -9999, 0], xRes = self.block_size, yRes = \
@@ -290,7 +291,8 @@ class atmospheric_correction(object):
         self._ele, self._cmask = auxs
         self._ele[np.isnan(self._ele)] = 0
         self._cmask[np.isnan(self._cmask)] = 0
-        self._cmask  = self._cmask.astype(bool)
+        self._cmask = binary_dilation(self._cmask, structure = np.ones((3,3)).astype(bool)).astype(bool)
+        #self._cmask  = self._cmask.astype(bool)
 
     def _fill_nan(self,):
         def fill_nan(array):                        
@@ -439,12 +441,6 @@ class atmospheric_correction(object):
             aot_unc, tcwv_unc, tco3_unc = tmp; del tmp
             unc  = np.sqrt(aot_dH ** 2 * aot_unc**2 + tcwv_dH ** 2 * tcwv_unc**2 + tco3_dH ** 2 * tco3_unc**2 + toa_dH**2 * 0.015**2)
             del aot_unc; del tcwv_unc; del tco3_unc
-            if self.mask.shape != toa.shape:
-                mask = reproject_data(self.mask_g, _g,xRes=xRes, yRes = yRes,xSize=x_off, ySize=y_size, resample = gdal.GRIORA_NearestNeighbour).data.astype(bool)
-            else:
-                mask = self.mask
-            #boa[~mask] = toa[~mask]
-            #unc[~mask] = 1.
             boas.append(boa)
             uncs.append(unc)
         boas, uncs = np.hstack(boas), np.hstack(uncs)
@@ -639,7 +635,6 @@ def test_modis():
     off   = 0
     sensor_sat = 'TERRA', 'MODIS'   
     band_index = [2, 3,0,1,5,6]
-    #toa_dir = './MODIS/'
     aot = toa_dir + '/aot.tif'
     tcwv = toa_dir + '/tcwv.tif'
     tco3 = toa_dir + '/tco3.tif'
@@ -654,9 +649,9 @@ def test_modis():
     return ret, atmo
 
 if __name__ == '__main__':
-    #s_ret, s_atmo = test_s2()
+    s_ret, s_atmo = test_s2()
     l_ret, l_atmo = test_l8()
-    #m_ret, m_atmo = test_modis()
+    m_ret, m_atmo = test_modis()
 
 
 
