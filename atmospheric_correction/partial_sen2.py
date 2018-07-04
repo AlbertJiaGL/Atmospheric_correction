@@ -1,8 +1,11 @@
 import os
+import time
+import errno
 import shutil
 import struct
 import requests
 import numpy as np
+from multiprocessing import Pool
 from collections import namedtuple
 from zipfile import ZipExtFile
 try:
@@ -11,7 +14,6 @@ except:
     from StringIO import StringIO
 with open('auth', 'rb') as f:
     auth = tuple(f.read().split('\n')[0].split(','))
-#url = "https://scihub.copernicus.eu/dhus/odata/v1/Products('58f47726-a280-4a7e-9663-22253a67da44')/$value"
 url = "https://scihub.copernicus.eu/dhus/odata/v1/Products('db63f27e-7dd3-4479-adaf-6a9abd49cddd')/$value"
 def get_CDr(url):
     '''
@@ -24,7 +26,7 @@ def get_CDr(url):
     foot = r.content
     end32 = foot.rfind('PK\x05\x06')
     if end32 != -1:
-        sig, disk_num, disk_dir, dircount, dircount2, dirsize, diroffseti, comment_len = struct.unpack("<4s4H2LH", foot[end32: end32 + 22])
+        sig, disk_num, disk_dir, dircount, dircount2, dirsize, diroffset, comment_len = struct.unpack("<4s4H2LH", foot[end32: end32 + 22])
     else:
         raise IOError('Bad zip file.')
 
@@ -117,11 +119,27 @@ def decode_CD(url):
     nfl = fl._make(new_list)
     return nfl
 
-def get_menber(url, rang, fname, zipinfo_dict, auth):
+def get_r(p):                                                         
+    url, r, auth, proxy = p
+    headers = {"Range": "bytes=%d-%d"%(r[0], r[1])}
+    #print r[0], r[1]-1
+    length = r[1] - r[0] + 1
+    proxies={"http": proxy, "https": proxy}
+    for i in range(100):
+        r = requests.get(url, headers=headers, auth=tuple(auth))#, proxies=proxies)
+        if len(r.content) == length:
+            break
+        else:
+            print headers
+            print len(r.content), length
+            time.sleep(1)
+    return r.content
+
+def get_menber(url, rang, fname, zipinfo_dict, auth, proxy):
     zipinfo = namedtuple('GenericDict', zipinfo_dict.keys())(**zipinfo_dict)
     headers = {"Range": "bytes=%d-%d"%(rang[0], rang[1]-1)}
-    requests.adapters.DEFAULT_RETRIES = 5
-    r = requests.get(url, headers=headers, auth=auth)
+    proxies={"http": proxy, "https": proxy}
+    r = requests.get(url, headers=headers, auth=auth)#, proxies=proxies)
     bad_file = []
     if r.ok:
         structFileHeader = "<4s2B4HL2L2H"
@@ -147,25 +165,150 @@ def get_menber(url, rang, fname, zipinfo_dict, auth):
         print bad_file
         return bad_file
     
-    
-if __name__ == '__main__':
+def get_content(url, rang, auths, proxy):
+    ranges = np.linspace(rang[0], rang[1], len(auths)*2, dtype=int)
+    nr = [[ranges[i], ranges[i+1]-1] for i in range(len(ranges)) if ranges[i] != ranges[-1]]
+    re_proxy = proxy[:len(nr)] * 2
+    re_auths =  auths * 2
+    ps = [[url, nr[i], re_auths[i], re_proxy[i]]for i in range(len(nr))]
+    p = Pool(len(nr)) 
+    ret = p.map(get_r, ps)   
+    ret = ''.join(ret)[:-1]
+    return ret
+
+def decode_and_save(ret,fname, zipinfo_dict):
+    zipinfo = namedtuple('GenericDict', zipinfo_dict.keys())(**zipinfo_dict)
+    structFileHeader = "<4s2B4HL2L2H"
+    stringFileHeader = "PK\003\004"                   
+    sizeFileHeader = 30 
+    fname_length, extra_length = struct.unpack(structFileHeader, ret[:sizeFileHeader])[10:12]
+    off = sizeFileHeader + fname_length + extra_length
+
+    if not os.path.exists(os.path.dirname(fname)):
+        try:
+            os.makedirs(os.path.dirname(fname))
+        except OSError as exc: # Guard against race condition
+            if exc.errno != errno.EEXIST:
+                raise
+    target = open(fname, 'wb')
+
+    f = StringIO(ret[off:])
+    if len(ret[off:]) != zipinfo.compress_size:
+        print len(ret[off:]),zipinfo.compress_size
+        print fname, 'length is not right'                   
+    source = ZipExtFile(f, 'r', zipinfo, None, False)
+    shutil.copyfileobj(source, target)
+    target.close()      
+    size = os.stat(fname).st_size
+    if size != zipinfo.file_size:
+        print 'wrong file size', fname
+        #bad_file.append(fname)                        
+        #os.remove(fname)
+        #return fname
+
+def get_content_once(url, rang, auths, proxy):
+    ranges = np.linspace(rang[0], rang[1], len(auths)*2, dtype=int)
+    nr = [[ranges[i], ranges[i+1]-1] for i in range(len(ranges)) if ranges[i] != ranges[-1]]
+    re_proxy = proxy[:len(nr)] * 2
+    re_auths =  auths * 2
+    ps = [[url, nr[i], re_auths[i], re_proxy[i]]for i in range(len(nr))]
+    p = Pool(len(nr)) 
+    ret = p.map(get_r, ps)   
+    ret = ''.join(ret)[:-1]                                                                                                           
+    return ret
+
+def _test_menber():
     flist = decode_CD(url)
     selected = [i for i in range(len(flist)) if ('50SKJ' in flist[i].filename) and ('.jp2' in flist[i].filename)]
-    from multiprocessing import Pool
-    from functools import partial
-    import sys
-    sys.path.insert(0, 'util')
-    from multi_process import parmap
-    def helper(inp):
-        url, rang, fname, zipinfo, auth = inp
-        return get_menber(url, rang, fname, zipinfo, auth)
-    auths = np.loadtxt('auths', dtype=str)
-    auths_repeat = auths.tolist() * 10000
-    inps = []
-    for j, i in enumerate(selected): 
+    def helper(inp):                                                                                             
+        url, rang, fname, zipinfo, auth, proxy = inp                                                             
+        return get_menber(url, rang, fname, zipinfo, tuple(auth), proxy)
+    auths = np.loadtxt('auths', dtype=str).tolist()                     
+    #good = get_good()                                                  
+    good = range(100)                                                   
+    auths_repeat = auths * 10000                                        
+    good_repeat = good  * 10000                                         
+    inps = []                                                           
+    for j, i in enumerate(selected):                                    
          inps.append([url, [flist[i].header_offset, flist[i].end], \
-                      flist[i].filename.split('/')[-1], vars(flist[i]), tuple(auths_repeat[j])])
-    p = Pool(min([len(auths), len(selected)]))
-    ret = p.map(helper, inps)
+                      flist[i].filename.split('/')[-1], vars(flist[i]), auths_repeat[j], good_repeat[j]])        
+    p = Pool(min([len(auths), len(selected)]))                         
+    for inp in inps:                                                   
+        get_menber(*tuple(inp))                                        
+    ret = p.map(helper, inps) 
 
+def _test_auths():
+    flist = decode_CD(url)
+    selected = [i for i in range(len(flist)) if ('50SKJ' in flist[i].filename) and ('.jp2' in flist[i].filename)]
+    def helper(inp):                                                                                             
+        url, rang, fname, zipinfo, auth, proxy = inp                                                             
+        return get_menber(url, rang, fname, zipinfo, tuple(auth), proxy)
+    auths = np.loadtxt('auths', dtype=str).tolist()                     
+    #good = get_good()                                                  
+    good = range(100)                                                   
+    auths_repeat = auths * 10000                                        
+    good_repeat = good  * 10000                                         
+    inps = []                                                           
+    for j, i in enumerate(selected):                                    
+         inps.append([url, [flist[i].header_offset, flist[i].end], \
+                      flist[i].filename.split('/')[-1], vars(flist[i]), auths_repeat[j], good_repeat[j]])        
+    #p = Pool(min([len(auths), len(selected)]))                         
+    #for inp in inps:                                                   
+    #    get_menber(*tuple(inp))                                        
+    #ret = p.map(helper, inps) 
+    rets = []                                                           
+    fnames = []                                                         
+    zipinfo_dicts = []                                                  
+    from datetime import datetime                                       
+    startTime = datetime.now()                                                                  
+    for j, i in enumerate(selected):                                    
+        try:                                                            
+            ret = get_content(url, [flist[i].header_offset, flist[i].end], auths, good)
+            rets.append(ret)                                            
+            fnames.append(flist[i].filename)             
+            zipinfo_dicts.append(vars(flist[i]))                        
+        except:                                                         
+            print flist[i].filename.split('/')[-1], 'failed'            
+    inps = [[rets[i], fnames[i], zipinfo_dicts[i]] for i in range(len(rets))]
+    def helper(inp):                                                    
+        ret,fname, zipinfo_dict = inp                                   
+        decode_and_save(ret,fname, zipinfo_dict)                        
+                                                                        
+        #ret = multi_get_member(url, [flist[i].header_offset, flist[i].end], \
+        #                 flist[i].filename.split('/')[-1], vars(flist[i]), auths, good)
+        #print ret                                                      
+    p = Pool(len(rets))                                                 
+    p.map(helper, inps)
+    print datetime.now() - startTime
 
+def save_helper(inp):
+    ret,fname, zipinfo_dict = inp
+    decode_and_save(ret,fname, zipinfo_dict)
+
+def downloader(url):
+    flist = decode_CD(url)
+    selected = [i for i in range(len(flist)) if (flist[i].filename[-1] !='/')]
+    #from datetime import datetime                                       
+    #startTime = datetime.now() 
+    auths = np.loadtxt('auths', dtype=str).tolist()
+    good = range(100)
+    rang = [flist[selected[0]].header_offset, flist[selected[-1]].end]
+    ret = get_content_once(url, rang, auths, good) 
+    rets = []                                      
+    fnames = []                                   
+    zipinfo_dicts = []
+    rets = []        
+    off = flist[selected[0]].header_offset
+    for i in selected:
+        buf = ret[flist[i].header_offset -off: flist[i].end - off]
+        rets.append(buf)
+        fnames.append(flist[i].filename)
+        zipinfo_dicts.append(vars(flist[i]))                                                                                          
+     
+    inps = [[rets[i], fnames[i], zipinfo_dicts[i]] for i in range(len(rets))]
+    p = Pool(len(rets))                            
+    p.map(save_helper, inps)                            
+    #print datetime.now() - startTime
+
+if __name__ == '__main__':
+    downloader(url)

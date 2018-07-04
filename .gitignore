@@ -8,6 +8,8 @@ task*
 *barax*
 *munich*
 *.tif
+*.jp2
+*.gml
 *.nc
 *.hdf
 *.pkl

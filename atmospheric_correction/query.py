@@ -208,7 +208,7 @@ if __name__ == '__main__':
     ao = 'POLYGON((115.79984234354565 39.41267418434987,115.81853363330639 39.41267418434987,115.81853363330639 39.42542974293974,115.79984234354565 39.42542974293974,115.79984234354565 39.41267418434987))'
     #a = query_sen2(aoi, search_by_tile='33TVJ', end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band = 'B02')
     #b = query_sen2(aoi, search_by_tile='33TVJ', end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band = None)
-    c = query_sen2(ao, search_by_tile='50SLJ', end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band=None, one_by_one = True)
+    c = query_sen2(ao, search_by_tile=False, end='2017-12-10', start='2016-01-01', val_pix_thresh=60, cloud_cover=20.1, band=None, one_by_one = True)
 
 
 
