@@ -3,7 +3,7 @@ from multiprocessing import Pool
 def test(proxy):
     url = 'https://httpbin.org/ip'
     try:
-        response = requests.get(url,proxies={"http": proxy, "https": proxy}, timeout=0.3)
+        response = requests.get(url,proxies={"http": proxy, "https": proxy}, timeout=0.2)
         return proxy
     except:
         pass

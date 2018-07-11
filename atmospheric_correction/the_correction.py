@@ -1,7 +1,7 @@
 #!/usr/bin/env python 
 import os
 import sys                                                                                                                                  
-sys.path.insert(0,'util')
+sys.path.insert(0,'/home/ucfafyi/DATA/Atmospheric_correction/atmospheric_correction/util')
 import gdal
 import psutil
 import logging
@@ -49,7 +49,7 @@ class atmospheric_correction(object):
                  ele_scale   = 0.001,
                  atmo_scale  = [1., 1., 1., 1., 1., 1.],
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
-                 emus_dir    = './emus/',
+                 emus_dir    = '/home/ucfafyi/DATA/Atmospheric_correction/atmospheric_correction/emus/',
                  cams_dir    = '/home/ucfafyi/netapp_10/cams/',
                  cams_scale  = [1., 0.1, 46.698, 1., 1., 1.],
                  block_size  = 600,
@@ -112,7 +112,7 @@ class atmospheric_correction(object):
             if os.path.exists(self.aoi):
                 try:
                     g = gdal.Open(self.aoi)
-                    subprocess.call(['gdaltindex', '-t_srs', 'EPSG:4326' , '-f', 'GeoJSON', self.toa_dir + '/AOI.json', self.aoi])
+                    subprocess.call(['gdaltindex', '-f', 'GeoJSON', self.toa_dir + '/AOI.json', self.aoi])
                 except:
                     try:
                         g = ogr.Open(self.aoi)
@@ -137,7 +137,7 @@ class atmospheric_correction(object):
                 with open(self.toa_dir + '/AOI.json', 'wb') as f:
                     f.write(gjson_str)
         if not os.path.exists(self.toa_dir + '/AOI.json'):
-            subprocess.call(['gdaltindex', '-t_srs', 'EPSG:4326' , '-f', 'GeoJSON', self.toa_dir +'/AOI.json', self.toa_bands[0]])
+            subprocess.call(['gdaltindex', '-f', 'GeoJSON', self.toa_dir +'/AOI.json', self.toa_bands[0]])
             self.logger.warning('AOI is not created and full band extend is used')
             self.aoi = self.toa_dir + '/AOI.json'
         else:
@@ -149,7 +149,8 @@ class atmospheric_correction(object):
         '''
         self._toa_bands = []
         for band in self.toa_bands:
-            g = gdal.Warp('', band, format = 'MEM', srcNodata = [-32768, -9999, 0], dstNodata=0, cutlineDSName= self.aoi, cropToCutline=True, resampleAlg = gdal.GRIORA_NearestNeighbour)
+            g = gdal.Warp('', band, format = 'MEM', srcNodata = [-32768, -9999, 0], dstNodata=0, warpOptions = \
+                          ['NUM_THREADS=ALL_CPUS'], cutlineDSName= self.aoi, cropToCutline=True, resampleAlg = gdal.GRIORA_NearestNeighbour)
             self._toa_bands.append(g)
         self.example_file = self._toa_bands[0]
         if self.cloud_mask is None:
@@ -650,8 +651,8 @@ def test_modis():
 
 if __name__ == '__main__':
     s_ret, s_atmo = test_s2()
-    l_ret, l_atmo = test_l8()
-    m_ret, m_atmo = test_modis()
+    #l_ret, l_atmo = test_l8()
+    #m_ret, m_atmo = test_modis()
 
 
 

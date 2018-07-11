@@ -175,7 +175,7 @@ class solving_atmo_paras(object):
             #    pre_mask = self._coarse_mask
             #else:
             self._coarse_mask = self._coarse_num > 0
-            self.b_m_pixs                        = self._coarse_num.max()#(self.aero_res / 500.)**2
+            self.b_m_pixs     = 4. #self._coarse_num.max()#(self.aero_res / 500.)**2
                 #self._coarse_mask = self._coarse_mask & self._grid_conversion(pre_mask, shape).astype(bool)
             #subs = [np.array_split(sub, self.num_blocks_y, axis=1) for sub in np.array_split(self.mask, self.num_blocks_x, axis=0)]           
             #self._coarse_mask = np.zeros((self.num_blocks_x, self.num_blocks_y))

@@ -179,7 +179,7 @@ def get_modisfiles ( platform, product, year, tile, proxy, \
     
     username = "marcyin"
     password = "Marc1234"
-   
+
     cj = CookieJar()
     opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
     

@@ -72,12 +72,12 @@ class reproject_data(object):
             dstSRS     = osr.SpatialReference( )
             raster_wkt = g.GetProjection()
             dstSRS.ImportFromWkt(raster_wkt)
-            self.g = gdal.Warp('', self.source_img, format = 'MEM', outputBounds = [xmin, ymin, xmax, ymax], dstNodata=self.dstNodata, \
-                               xRes = self.xRes, yRes = self.yRes, dstSRS = dstSRS, outputType = self.outputType, srcNodata = self.srcNodata, resampleAlg = self.resample)
+            self.g = gdal.Warp('', self.source_img, format = 'MEM', outputBounds = [xmin, ymin, xmax, ymax], dstNodata=self.dstNodata, warpOptions = ['NUM_THREADS=ALL_CPUS'],\
+                                xRes = self.xRes, yRes = self.yRes, dstSRS = dstSRS, outputType = self.outputType, srcNodata = self.srcNodata, resampleAlg = self.resample)
             
         else:
             self.g = gdal.Warp('', self.source_img, format = 'MEM', outputBounds = [self.xmin, self.ymin, \
-                               self.xmax, self.ymax], xRes = self.xRes, yRes = self.yRes, dstSRS = self.dstSRS,\
+                               self.xmax, self.ymax], xRes = self.xRes, yRes = self.yRes, dstSRS = self.dstSRS, warpOptions = ['NUM_THREADS=ALL_CPUS'],\
                                copyMetadata=True, outputType = self.outputType, dstNodata=self.dstNodata, srcNodata = self.srcNodata, resampleAlg = self.resample)
         if self.g.RasterCount <= 3:
             self.data = self.g.ReadAsArray()

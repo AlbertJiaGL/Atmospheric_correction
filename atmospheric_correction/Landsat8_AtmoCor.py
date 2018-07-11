@@ -10,14 +10,12 @@ from downloaders import *
 root = os.getcwd()
 parser = argparse.ArgumentParser(description='Landsat 8 Atmopsheric correction Excutable')
 parser.add_argument('-f', "--l8_file",        help='A L8 file and the file can be not downloaded',      required = True)
-parser.add_argument("-m", "--MCD43_file_dir", help="Directory where you store MCD43A1.006 data",        default  = root +'/MCD43/')
+parser.add_argument("-m", "--MCD43_file_dir", help="Directory where you store MCD43A1.006 data",        default  = root + '/MCD43/')
 parser.add_argument("-e", "--emulator_dir",   help="Directory where you store emulators.",              default  = root + '/emus/')
 parser.add_argument("-d", "--dem",            help="A global dem file, and a vrt file is recommonded.", default  = root + '/eles/global_dem.vrt')
 parser.add_argument("-c", "--cams",           help="Directory where you store cams data.",              default  = root + '/cams/')
 parser.add_argument("--version",              action="version",                                         version='%(prog)s - Version 2.0')
 args = parser.parse_args()
-
-
 
 l8_toa_dir       = '/'.join(args.l8_file.split('/')[:-1])
 header           = '_'.join(args.l8_file.split('/')[-1].split('_')[:7])

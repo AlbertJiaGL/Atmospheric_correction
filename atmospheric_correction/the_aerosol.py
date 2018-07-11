@@ -1,6 +1,7 @@
 import os
+import gc
 import sys
-sys.path.insert(0, 'util')
+sys.path.insert(0, '/home/ucfafyi/DATA/Atmospheric_correction/atmospheric_correction/util')
 import ogr
 import osr
 import gdal
@@ -43,7 +44,7 @@ class solve_aerosol(object):
                  sun_angles,
                  obs_time,
                  cloud_mask,
-                 gamma       = 0.5,
+                 gamma       = 10.,
                  a_z_order   = 1,
                  pixel_res   = None,
                  aoi         = None,
@@ -58,12 +59,11 @@ class solve_aerosol(object):
                  ang_scale   = 0.01,
                  ele_scale   = 0.001,
                  prior_scale = [1., 0.1, 46.698, 1., 1., 1.],
-                 spec_slope  = [ 1.06946607,  1.03048916,  1.04039226,  1.00163932,  1.00010918, 0.95607606,  0.99951677],
-                 spec_off    = [ 0.0035921 , -0.00142761, -0.00383504, -0.00558762, -0.00570695, 0.00861192,  0.00188871],
-                 emus_dir    = './emus/',
+                 emus_dir    = '/home/ucfafyi/DATA/Atmospheric_correction/atmospheric_correction/emus/',
                  mcd43_dir   = '/home/ucfafyi/DATA/Multiply/MCD43/',
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
                  cams_dir    = '/home/ucfafyi/netapp_10/cams/',
+                 spec_m_dir  = '/home/ucfafyi/DATA/Atmospheric_correction/atmospheric_correction/spectral_mapping',
                  aero_res    = 1000):                                 
         self.sensor      = sensor_sat[0]
         self.satellite   = sensor_sat[1]
@@ -96,8 +96,13 @@ class solve_aerosol(object):
         self.boa_wv      = [645, 859, 469, 555, 1640, 2130]
         self.aero_res    = aero_res
         self.mcd43_tmp   = '%s/MCD43A1.A%d%03d.%s.006.*.hdf'
-        self.spectral_transform = [spec_slope, spec_off]
         self.toa_dir     =  os.path.abspath('/'.join(toa_bands[0].split('/')[:-1]))
+        try:
+            spec_map         = np.loadtxt(spec_m_dir + '/TERRA_%s_spectral_mapping.txt'%self.satellite).T
+        except:
+            spec_map         = np.loadtxt(spec_m_dir + '/TERRA_%s_spectral_mapping.txt'%self.sensor).T
+        self.spec_slope  = spec_map[0]
+        self.spec_off    = spec_map[1]
     
         # create logger
         self.logger = logging.getLogger('AtmoCor')
@@ -118,7 +123,7 @@ class solve_aerosol(object):
             if os.path.exists(self.aoi):
                 try:
                     g = gdal.Open(self.aoi)
-                    subprocess.call(['gdaltindex', '-t_srs', 'EPSG:4326' , '-f', 'GeoJSON', self.toa_dir + '/AOI.json', self.aoi])
+                    subprocess.call(['gdaltindex', '-f', 'GeoJSON', self.toa_dir + '/AOI.json', self.aoi])
                 except:
                     try:
                         g = ogr.Open(self.aoi)
@@ -143,7 +148,7 @@ class solve_aerosol(object):
                 with open(self.toa_dir + '/AOI.json', 'wb') as f:
                     f.write(gjson_str)
         if not os.path.exists(self.toa_dir + '/AOI.json'):
-            subprocess.call(['gdaltindex', '-t_srs', 'EPSG:4326' , '-f', 'GeoJSON', self.toa_dir +'/AOI.json', self.toa_bands[0]])
+            subprocess.call(['gdaltindex', '-f', 'GeoJSON', self.toa_dir +'/AOI.json', self.toa_bands[0]])
             self.logger.warning('AOI is not created and full band extend is used')
             self.aoi = self.toa_dir + '/AOI.json'
         else:
@@ -231,7 +236,7 @@ class solve_aerosol(object):
         if 1 in self.boa_bands:
             GREEN  = self._toa_bands[np.where(self.boa_bands==4)[0][0]].ReadAsArray()*self.ref_scale+self.ref_off
         if (SWIR_1 is not None) & (GREEN is not None):
-            NDSI      = (SWIR_1 - GREEN) / (SWIR_1 + GREEN)
+            NDSI      = (GREEN - SWIR_1) / (SWIR_1 + GREEN)
             snow_mask = (NDSI > 0.42) | (SWIR_1 <= 0.0001) | (GREEN <= 0.0001) | np.isnan(SWIR_1) | np.isnan(GREEN) 
             del SWIR_1; del GREEN; del NDSI
         mask     = water_mask | snow_mask | cloud | (BLUE > 1)
@@ -248,7 +253,7 @@ class solve_aerosol(object):
         '''
         self._toa_bands = []
         for band in self.toa_bands:
-            g = gdal.Warp('', band, format = 'MEM', xRes = self.pixel_res, yRes = self.pixel_res, \
+            g = gdal.Warp('', band, format = 'MEM', xRes = self.pixel_res, yRes = self.pixel_res, warpOptions = ['NUM_THREADS=ALL_CPUS'],\
                           srcNodata = 0, dstNodata=0, cutlineDSName= self.aoi, cropToCutline=True, resampleAlg = gdal.GRIORA_NearestNeighbour)
             self._toa_bands.append(g)
         self.example_file = self._toa_bands[0]
@@ -267,8 +272,6 @@ class solve_aerosol(object):
                                                                 self.example_file, \
                                                                 xRes=self.aero_res*0.5, \
                                                                 yRes=self.aero_res*0.5, \
-                                                                #xSize=self.xSize, \
-                                                                #ySize=self.ySize, \
                                                                 srcNodata = [-32768, 0],\
                                                                 outputType= gdal.GDT_Float32, \
                                                                 resample = gdal.GRIORA_NearestNeighbour).g
@@ -277,8 +280,6 @@ class solve_aerosol(object):
                                                                 self.example_file, \
                                                                 xRes=self.aero_res*0.5, \
                                                                 yRes=self.aero_res*0.5, \
-                                                                #xSize=self.xSize, \
-                                                                #ySize=self.ySize, \
                                                                 srcNodata = 0,\
                                                                 outputType= gdal.GDT_Float32,\
                                                                 resample = gdal.GRIORA_Bilinear).g
@@ -340,15 +341,6 @@ class solve_aerosol(object):
         temp = []
         for _, i in enumerate(priors):
             var_g = self._var_parser(i) 
-            #if os.path.exists(str(i)):                                                                  
-            #    _g = gdal.Open(str(i))                                                               
-            #elif type(i).__module__== 'numpy':                                                          
-            #    _g = array_to_raster(i, self.example_file)
-            #else:
-            #    val = float(i)
-            #    g_array = np.zeros((10,10))
-            #    g_array[:] = val
-            #    _g = array_to_raster(g_array, self.example_file)
             prior_g = self.bilinear_resampler(var_g)
             if use_cams[_]:
                 g      = var_g.GetRasterBand(int(time_ind+1))
@@ -467,8 +459,10 @@ class solve_aerosol(object):
             
             def smooth(da_w):
                 da, w = da_w
+                mid = int(da.shape[0]/2)
+                if (da.shape[-1]==0) | (w.shape[-1]==0):
+                    return da[mid], w[mid]
                 data  = np.array(smoothn(da, s=10., smoothOrder=1., axis=0, TolZ=0.001, verbose=False, isrobust=True, W = w))[[0, 3],]
-                mid = int(data[0].shape[0]/2)
                 return data[0][mid], data[1][mid]
             boa = []
             w = []
@@ -562,6 +556,7 @@ class solve_aerosol(object):
         '''
         Find needed emulators based on the sensor and satellite names.
         '''
+
         xap_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xap_%s.pkl'%(self.sensor, self.satellite))[0]
         xbp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xbp_%s.pkl'%(self.sensor, self.satellite))[0]
         xcp_emu = glob(self.emus_dir + '/isotropic_%s_emulators_optimization_xcp_%s.pkl'%(self.sensor, self.satellite))[0]
@@ -573,7 +568,9 @@ class solve_aerosol(object):
                 f = open(fname, mode='rb')
                 #f = lambda em: pkl.load(open(em, 'rb'))
             return pkl.load(f)
+        gc.disable()
         self.emus = parmap(read_emus, [xap_emu, xbp_emu, xcp_emu])
+        gc.enable()
 
     def _get_convolved_toa(self,):       
                                          
@@ -601,8 +598,8 @@ class solve_aerosol(object):
         _mask    = boa_mask & toa_mask
         self.hx      = self.hx       [_mask]
         self.hy      = self.hy       [_mask]
-        self.toa     = self.toa    [:, _mask]
-        self.boa     = self.boa    [:, _mask]
+        self.toa     = self.toa    [:, _mask] 
+        self.boa     = self.boa    [:, _mask] * self.spec_slope[...,None] + self.spec_off[...,None]
         self.boa_unc = self.boa_unc[:, _mask]
         eps=1.7                                     
         mask = True                                 
@@ -627,6 +624,7 @@ class solve_aerosol(object):
         self._vaa = np.array(parmap(fill_nan, list(self._vaa)))
         self._saa, self._sza, self._ele, self._aot, self._tcwv, self._tco3 = \
         parmap(fill_nan, [self._saa, self._sza, self._ele, self._aot, self._tcwv, self._tco3])
+        self._aot = self._aot * 1.3 - 0.08
 
     def _solving(self,):
         self.logger.propagate = False
@@ -641,48 +639,60 @@ class solve_aerosol(object):
         self._parse_angles()
         self.logger.info('Mask bad pixeles.')
         self._mask_bad_pix()
-        self.logger.info('Get simulated BOA.')
-        self._get_boa()
-        self.logger.info('Get PSF.')
-        self._get_psf()
-        self.logger.info('Get simulated TOA reflectance.')
-        self._get_convolved_toa()
-        self.logger.info('Filtering data.')
-        self._re_mask()
-        self.logger.info('Loading emulators.')
-        self._load_xa_xb_xc_emus()
-        self.logger.info('Reading priors and elevation.')
-        self._read_aux()
-        self._fill_nan()
-        if self.mask.sum() ==0:
-            self.logger.info('No valid value is found for retrieval of atmospheric parameters and priors are stored.')
-            ret = np.array([[self.aot, self.tcwv, self.tco3], [self.aot_unc, self.tcwv_unc, self.tco3_unc]])
+        if (~self.bad_pix).sum() > 100.:
+            self.logger.info('Get simulated BOA.')
+            self._get_boa()
+            self.logger.info('Get PSF.')
+            self._get_psf()
+            self.logger.info('Get simulated TOA reflectance.')
+            self._get_convolved_toa()
+            self.logger.info('Filtering data.')
+            self._re_mask()
+            self.logger.info('Loading emulators.')
+            self._load_xa_xb_xc_emus()
+            self.logger.info('Reading priors and elevation.')
+            self._read_aux()
+            self._fill_nan()
+            if self.mask.sum() ==0:
+                self.logger.info('No valid value is found for retrieval of atmospheric parameters and priors are stored.')
+                ret = np.array([[self._aot, self._tcwv, self._tco3], [self._aot_unc, self._tcwv_unc, self._tco3_unc]])
+                self.aero_res /=2
+                self.ySize *=2
+                self.xSize *=2
+            else:
+                self.aero = solving_atmo_paras(self.boa, 
+                                               self.toa,
+                                               self._sza, 
+                                               self._vza,
+                                               self._saa, 
+                                               self._vaa,
+                                               self._aot, 
+                                               self._tcwv,
+                                               self._tco3, 
+                                               self._ele,
+                                               self._aot_unc,
+                                               self._tcwv_unc,
+                                               self._tco3_unc,
+                                               self.boa_unc,
+                                               self.hx, self.hy,
+                                               self.mask,
+                                               self.full_res,
+                                               self.aero_res,
+                                               self.emus,
+                                               self.band_index,
+                                               self.boa_wv,
+                                               pix_res = self.pixel_res,
+                                               gamma = self.gamma)
+                ret = self.aero._multi_grid_solver()
         else:
-            self.aero = solving_atmo_paras(self.boa, 
-                                           self.toa,
-                                           self._sza, 
-                                           self._vza,
-                                           self._saa, 
-                                           self._vaa,
-                                           self._aot, 
-                                           self._tcwv,
-                                           self._tco3, 
-                                           self._ele,
-                                           self._aot_unc,
-                                           self._tcwv_unc,
-                                           self._tco3_unc,
-                                           self.boa_unc,
-                                           self.hx, self.hy,
-                                           self.mask,
-                                           self.full_res,
-                                           self.aero_res,
-                                           self.emus,
-                                           self.band_index,
-                                           self.boa_wv,
-                                           pix_res = self.pixel_res,
-                                           gamma = self.gamma)
-            ret = self.aero._multi_grid_solver()
-        
+            self.logger.info('No valid value is found for retrieval of atmospheric parameters and priors are stored.')
+            self._read_aux()       
+            self._fill_nan()
+            ret = np.array([[self._aot, self._tcwv, self._tco3], [self._aot_unc, self._tcwv_unc, self._tco3_unc]])
+            self.aero_res /=2
+            self.ySize *=2
+            self.xSize *=2
+            
         solved     = ret[0].reshape(3, self.ySize, self.xSize)
         unc        = ret[1].reshape(3, self.ySize, self.xSize)
         self.logger.info('Finished retrieval and saving them into local files.')
@@ -736,7 +746,7 @@ def test_s2():
     obs_time = datetime(2017, 12, 1, 9, 45, 19)
     cloud_mask = gdal.Open(base.replace('IMG_DATA/T34TDT_20171201T094341_', 'cloud.tif')).ReadAsArray() / 100.
     cloud_mask = cloud_mask > 0.6
-    aero = solve_aerosol(sensor_sat,toa_bands,band_wv, band_index,view_angles,sun_angles,obs_time,cloud_mask, gamma=20.)
+    aero = solve_aerosol(sensor_sat,toa_bands,band_wv, band_index,view_angles,sun_angles,obs_time,cloud_mask, gamma=10.)
     aero._solving()
     return aero
 
@@ -754,7 +764,7 @@ def test_l8():
     band_wv    = [469, 555, 645, 859, 1640, 2130]
     obs_time = datetime(2017, 8, 31, 15, 40, 46)  
     band_index = [1,2,3,4,5,6]
-    aero = solve_aerosol(sensor_sat,toa_bands,band_wv, band_index,view_angles,sun_angles,obs_time,cloud_mask, gamma=20., ref_scale = scale, ref_off = off)
+    aero = solve_aerosol(sensor_sat,toa_bands,band_wv, band_index,view_angles,sun_angles,obs_time,cloud_mask, gamma=10., ref_scale = scale, ref_off = off)
     aero._solving()
     return aero
 
@@ -798,7 +808,7 @@ def test_modis():
     scale = 1
     off   = 0
     band_wv    = [469, 555, 645, 859, 1640, 2130]
-    gamma = 20.
+    gamma = 10.
     sensor_sat = 'TERRA', 'MODIS'
     band_index = [2, 3,0,1,5,6]
     emus_dir   = '/data/store01/data_dirs/students/ucfafyi/Multiply/emus/old_emus/'

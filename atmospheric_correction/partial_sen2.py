@@ -112,7 +112,7 @@ def decode_CD(url):
         if i < len(offsets)-1: 
             vals.append(offsets[i+1])
         else:
-            vals.append(total_size)
+            vals.append(back-1)
         nncdt = ncdt._make(vals)
         new_list.append(nncdt)
     fl = namedtuple('Full', names)
@@ -131,6 +131,7 @@ def get_r(p):
             break
         else:
             print headers
+            print auth
             print len(r.content), length
             time.sleep(1)
     return r.content
@@ -174,6 +175,8 @@ def get_content(url, rang, auths, proxy):
     p = Pool(len(nr)) 
     ret = p.map(get_r, ps)   
     ret = ''.join(ret)[:-1]
+    pool.close()
+    pool.join()
     return ret
 
 def decode_and_save(ret,fname, zipinfo_dict):
@@ -214,7 +217,9 @@ def get_content_once(url, rang, auths, proxy):
     ps = [[url, nr[i], re_auths[i], re_proxy[i]]for i in range(len(nr))]
     p = Pool(len(nr)) 
     ret = p.map(get_r, ps)   
-    ret = ''.join(ret)[:-1]                                                                                                           
+    ret = ''.join(ret)[:-1]  
+    pool.close()
+    pool.join()                                                                                                         
     return ret
 
 def _test_menber():
@@ -236,6 +241,8 @@ def _test_menber():
     for inp in inps:                                                   
         get_menber(*tuple(inp))                                        
     ret = p.map(helper, inps) 
+    pool.close()
+    pool.join()                                                                                                         
 
 def _test_auths():
     flist = decode_CD(url)
@@ -279,6 +286,8 @@ def _test_auths():
         #print ret                                                      
     p = Pool(len(rets))                                                 
     p.map(helper, inps)
+    pool.close()
+    pool.join()                                                                                                         
     print datetime.now() - startTime
 
 def save_helper(inp):
@@ -308,6 +317,8 @@ def downloader(url):
     inps = [[rets[i], fnames[i], zipinfo_dicts[i]] for i in range(len(rets))]
     p = Pool(len(rets))                            
     p.map(save_helper, inps)                            
+    pool.close()
+    pool.join()                                                                                                         
     #print datetime.now() - startTime
 
 if __name__ == '__main__':
