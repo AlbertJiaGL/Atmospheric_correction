@@ -27,3 +27,5 @@ The outputs are the corrected TOA images saved as `B0*_sur.tif` for each band an
 
 ### Landsat 8:
 The outputs are the corrected TOA images saved as `LC08_L1TP_029029_20160720_20170222_01_T1_sur_b*.tif` for each band and  uncertainty `LC08_L1TP_029029_20160720_20170222_01_T1_sur_b*_unc.tif`, and `LC08_L1TP_029029_20160720_20170222_01_T1_TOA_RGB.tif` and `LC08_L1TP_029029_20160720_20170222_01_T1_BOA_RGB.tif` are also generated for fast visual check. They are all under `/directory/where/you/store/l8/data/LC08_L1TP_029029_20160720_20170222_01_T1`.
+### LICENSE
+GNU GENERAL PUBLIC LICENSE V3

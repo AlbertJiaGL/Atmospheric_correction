@@ -149,7 +149,7 @@ class atmospheric_correction(object):
         '''
         self._toa_bands = []
         for band in self.toa_bands:
-            g = gdal.Warp('', band, format = 'MEM', srcNodata = [-32768, -9999, 0], dstNodata=0, warpOptions = \
+            g = gdal.Warp('', band, format = 'MEM', srcNodata = 0, dstNodata=0, warpOptions = \
                           ['NUM_THREADS=ALL_CPUS'], cutlineDSName= self.aoi, cropToCutline=True, resampleAlg = gdal.GRIORA_NearestNeighbour)
             self._toa_bands.append(g)
         self.example_file = self._toa_bands[0]
@@ -158,7 +158,7 @@ class atmospheric_correction(object):
         self.mask = self.example_file.ReadAsArray() >0# & (~self.cloud_mask)
         self.mask_g = array_to_raster(self.mask.astype(float), self.example_file)
         self.mask = self.mask.astype(bool)
-        self.mg    = gdal.Warp('', band, format = 'MEM', srcNodata = [-32768, -9999, 0], xRes = self.block_size, yRes = \
+        self.mg    = gdal.Warp('', band, format = 'MEM', srcNodata = None, xRes = self.block_size, yRes = \
                                self.block_size, cutlineDSName= self.aoi, cropToCutline=True, resampleAlg = gdal.GRIORA_NearestNeighbour)        
   
     def _load_xa_xb_xc_emus(self,):
@@ -209,11 +209,11 @@ class atmospheric_correction(object):
         _sun_angles = [] 
         _view_angles = []
         for fname in self._sun_angles:     
-            ang = reproject_data(fname, self.mg, srcNodata = [-32768, -9999, 0], resample = \
+            ang = reproject_data(fname, self.mg, srcNodata = None, resample = \
                                  gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).data
             _sun_angles.append(ang)        
         for fname in self._view_angles:    
-            ang = reproject_data(fname, self.mg, srcNodata = [-32768, -9999, 0], resample = \
+            ang = reproject_data(fname, self.mg, srcNodata = None, resample = \
                                  gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).data
             _view_angles.append(ang)       
         _view_angles = np.array(_view_angles)
@@ -259,7 +259,7 @@ class atmospheric_correction(object):
                     atmos[i] = self.cams_dir + '/'.join([datetime.strftime(self.obs_time, '%Y_%m_%d'),\
                                                          datetime.strftime(self.obs_time, '%Y_%m_%d')+'_%s.tif'%cams_names[i]])
                     var_g  = self._var_parser(atmos[i])
-                    _g     = reproject_data(var_g, self.mg, srcNodata = [-32768, -9999, 0], resample = \
+                    _g     = reproject_data(var_g, self.mg, srcNodata = None, resample = \
                                             gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).g
                     offset   = var_g.GetOffset()            
                     scale    = var_g.GetScale()             
@@ -270,11 +270,11 @@ class atmospheric_correction(object):
         else:
             for i in range(3):
                 var_g    = self._var_parser(atmos[i])
-                data     = reproject_data(var_g, self.mg, srcNodata = [-32768, -9999, 0], resample = \
+                data     = reproject_data(var_g, self.mg, srcNodata = np.nan, resample = \
                                      gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).data
                 atmos[i] = data * self.atmo_scale[i]
                 unc_g    = self._var_parser(atmo_uncs[i])
-                ug     = reproject_data(unc_g, self.mg, srcNodata = [-32768, -9999, 0], resample = \
+                ug     = reproject_data(unc_g, self.mg, srcNodata = np.nan, resample = \
                                           gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).data
                 atmo_uncs[i] = ug
 
@@ -286,7 +286,7 @@ class atmospheric_correction(object):
         scales = [self.ele_scale, 1]
         for i  in range(len(auxs)):
             var_g = self._var_parser(auxs[i])
-            dat = reproject_data(var_g, self.mg, srcNodata = [-32768, -9999, 0], resample = \
+            dat = reproject_data(var_g, self.mg, srcNodata = 0, resample = \
                                  gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).data
             auxs[i] = dat * scales[i]
         self._ele, self._cmask = auxs

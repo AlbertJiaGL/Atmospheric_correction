@@ -272,7 +272,7 @@ class solve_aerosol(object):
                                                                 self.example_file, \
                                                                 xRes=self.aero_res*0.5, \
                                                                 yRes=self.aero_res*0.5, \
-                                                                srcNodata = [-32768, 0],\
+                                                                srcNodata = None,\
                                                                 outputType= gdal.GDT_Float32, \
                                                                 resample = gdal.GRIORA_NearestNeighbour).g
 
@@ -437,7 +437,7 @@ class solve_aerosol(object):
                     fname = self.MCD43_dir + '/'.join([datetime.strftime(self.obs_time, '%Y-%m-%d'), temp%(doy, band)])
                     fnames.append(fname)
         das, ws = self._read_MCD43(fnames)   
-        mg = gdal.Warp('',fnames[0], format = 'MEM', dstNodata= [-32768, 0], xRes = self.aero_res*0.5, yRes = \
+        mg = gdal.Warp('',fnames[0], format = 'MEM', dstNodata= None, xRes = self.aero_res*0.5, yRes = \
                        self.aero_res*0.5, cutlineDSName=self.aoi, cropToCutline=True, resampleAlg = gdal.GRIORA_NearestNeighbour)
         hg = self.example_file
         self.hx, self.hy, hmask, rmask = self._get_index(mg, hg)
@@ -489,11 +489,11 @@ class solve_aerosol(object):
         _sun_angles = [] 
         _view_angles = []
         for fname in self._sun_angles:     
-            ang = reproject_data(fname, mg, srcNodata = [-32768, 0], resample = \
+            ang = reproject_data(fname, mg, srcNodata = None, resample = \
                                  gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).data
             _sun_angles.append(ang)        
         for fname in self._view_angles:    
-            ang = reproject_data(fname, mg, srcNodata = [-32768, 0], resample = \
+            ang = reproject_data(fname, mg, srcNodata = None, resample = \
                                  gdal.GRIORA_NearestNeighbour, dstNodata=np.nan, outputType= gdal.GDT_Float32).data
             _view_angles.append(ang)       
         _view_angles = np.squeeze(np.array(_view_angles))
@@ -696,14 +696,13 @@ class solve_aerosol(object):
         solved     = ret[0].reshape(3, self.ySize, self.xSize)
         unc        = ret[1].reshape(3, self.ySize, self.xSize)
         self.logger.info('Finished retrieval and saving them into local files.')
-        para_names      = 'aot', 'tcwv', 'tco3', 'aot_unc', 'tcwv_unc', 'tco3_unc'
+        para_names = 'aot', 'tcwv', 'tco3', 'aot_unc', 'tcwv_unc', 'tco3_unc'
+        toa_dir    = self.toa_dir + '/' +'B'.join(self.toa_bands[0].split('/')[-1].split('B')[:-1])
         name_arrays     = zip(para_names, list(solved ) + list(unc))
-        par = partial(save_posterior, g = self.example_file, aero_res = self.aero_res, toa_dir = self.toa_dir)
+        par = partial(save_posterior, g = self.example_file, aero_res = self.aero_res, toa_dir = toa_dir)
         parmap(par, name_arrays)
         self.post_aot,     self.post_tcwv,     self.post_tco3,    = solved
         self.post_aot_unc, self.post_tcwv_unc, self.post_tco3_unc = unc
-
-
     
 def get_kk(angles):
     vza ,sza,raa = angles
@@ -721,7 +720,7 @@ def save_posterior(name_array, g, aero_res, toa_dir):
     xres, yres   = aero_res, aero_res
     geotransform = (xmin, xres, 0, ymax, 0, -yres)
     nx, ny       = array.shape
-    outputFileName = toa_dir + '/%s.tif'%name
+    outputFileName = toa_dir + '%s.tif'%name
     if os.path.exists(outputFileName):
         os.remove(outputFileName)
     dst_ds = gdal.GetDriverByName('GTiff').Create(outputFileName, ny, nx, 1, gdal.GDT_Float32, options=["TILED=YES", "COMPRESS=DEFLATE"])
