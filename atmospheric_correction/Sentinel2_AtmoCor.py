@@ -60,7 +60,6 @@ aero = solve_aerosol(year, month, day, \
                      satellite   = args.satellite, \
                      s2_psf      = None)
 aero.solving_s2_aerosol()
-'''
 atm = atmospheric_correction(year, \
                              month, \
                              day, \
@@ -71,4 +70,3 @@ atm = atmospheric_correction(year, \
                              global_dem  = args.dem, \
                              emus_dir    = args.emulator_dir)
 atm.atmospheric_correction()  
-'''

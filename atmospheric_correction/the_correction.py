@@ -48,9 +48,11 @@ class atmospheric_correction(object):
                  ang_scale   = 0.01,
                  ele_scale   = 0.001,
                  atmo_scale  = [1., 1., 1., 1., 1., 1.],
+                 #global_dem  = '/vsicurl/http://www2.geog.ucl.ac.uk/~ucfafyi/eles/global_dem.vrt',
+                 #cams_dir    = '/vsicurl/http://www2.geog.ucl.ac.uk/~ucfafyi/cams/',
                  global_dem  = '/home/ucfafyi/DATA/Multiply/eles/global_dem.vrt',
-                 emus_dir    = '/home/ucfafyi/DATA/Atmospheric_correction/atmospheric_correction/emus/',
                  cams_dir    = '/home/ucfafyi/netapp_10/cams/',
+                 emus_dir    = '/home/ucfafyi/DATA/Atmospheric_correction/atmospheric_correction/emus/',
                  cams_scale  = [1., 0.1, 46.698, 1., 1., 1.],
                  block_size  = 600,
                  rgb         = [None, None, None]
@@ -176,6 +178,8 @@ class atmospheric_correction(object):
             var_g = gdal.Open(str(var)) 
         elif type(var).__module__== 'numpy':
             var_g = array_to_raster(var, self.example_file) 
+        elif ('/vsicurl/' in str(var)) or ('/vsizip/') in str(var):
+            var_g = gdal.Open(str(var))
         else:              
             var          = float(var) 
             var_array    = np.zeros((10,10))      

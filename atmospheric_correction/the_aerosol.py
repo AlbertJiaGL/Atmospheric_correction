@@ -625,6 +625,7 @@ class solve_aerosol(object):
         self._saa, self._sza, self._ele, self._aot, self._tcwv, self._tco3 = \
         parmap(fill_nan, [self._saa, self._sza, self._ele, self._aot, self._tcwv, self._tco3])
         self._aot = self._aot * 1.3 - 0.08
+        self._aot = np.maximum(self._aot, 0)
 
     def _solving(self,):
         self.logger.propagate = False
@@ -657,8 +658,9 @@ class solve_aerosol(object):
                 self.logger.info('No valid value is found for retrieval of atmospheric parameters and priors are stored.')
                 ret = np.array([[self._aot, self._tcwv, self._tco3], [self._aot_unc, self._tcwv_unc, self._tco3_unc]])
                 self.aero_res /=2
-                self.ySize *=2
-                self.xSize *=2
+                #self.ySize *=2
+                #self.xSize *=2
+                self.ySize, self.xSize = self._aot.shape
             else:
                 self.aero = solving_atmo_paras(self.boa, 
                                                self.toa,
@@ -690,8 +692,9 @@ class solve_aerosol(object):
             self._fill_nan()
             ret = np.array([[self._aot, self._tcwv, self._tco3], [self._aot_unc, self._tcwv_unc, self._tco3_unc]])
             self.aero_res /=2
-            self.ySize *=2
-            self.xSize *=2
+            #self.ySize *=2
+            #self.xSize *=2
+            self.ySize, self.xSize = self._aot.shape
             
         solved     = ret[0].reshape(3, self.ySize, self.xSize)
         unc        = ret[1].reshape(3, self.ySize, self.xSize)
